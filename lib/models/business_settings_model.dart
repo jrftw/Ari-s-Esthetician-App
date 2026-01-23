@@ -1,0 +1,319 @@
+/*
+ * Filename: business_settings_model.dart
+ * Purpose: Data model for configurable business settings and branding
+ * Author: Kevin Doyle Jr. / Infinitum Imagery LLC
+ * Last Modified: 2024-01-XX
+ * Dependencies: cloud_firestore, equatable, json_annotation
+ * Platform Compatibility: iOS, Android, Web
+ */
+
+// MARK: - Imports
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:equatable/equatable.dart';
+import 'package:json_annotation/json_annotation.dart';
+
+part 'business_settings_model.g.dart';
+
+// MARK: - Business Hours Model
+/// Represents working hours for a specific day
+@JsonSerializable()
+class BusinessHoursModel extends Equatable {
+  /// Day of week (0 = Sunday, 6 = Saturday)
+  final int dayOfWeek;
+  
+  /// Whether the business is open on this day
+  final bool isOpen;
+  
+  /// List of time slots (start and end times in 24-hour format)
+  /// Format: ["09:00", "12:00", "13:00", "17:00"] for 9am-12pm and 1pm-5pm
+  @JsonKey(defaultValue: [])
+  final List<String> timeSlots;
+
+  const BusinessHoursModel({
+    required this.dayOfWeek,
+    this.isOpen = false,
+    this.timeSlots = const [],
+  });
+
+  factory BusinessHoursModel.fromJson(Map<String, dynamic> json) =>
+      _$BusinessHoursModelFromJson(json);
+
+  Map<String, dynamic> toJson() => _$BusinessHoursModelToJson(this);
+
+  @override
+  List<Object?> get props => [dayOfWeek, isOpen, timeSlots];
+}
+
+// MARK: - Business Settings Model
+/// Represents all configurable business settings including branding and policies
+/// This model is used to customize the app without code changes
+@JsonSerializable()
+class BusinessSettingsModel extends Equatable {
+  /// Unique identifier (typically "main" or business ID)
+  final String id;
+  
+  /// Business name (displayed throughout the app)
+  final String businessName;
+  
+  /// Business email address
+  final String businessEmail;
+  
+  /// Business phone number
+  final String businessPhone;
+  
+  /// Business address
+  final String? businessAddress;
+  
+  /// Business logo URL
+  final String? logoUrl;
+  
+  /// Primary brand color (hex code)
+  final String? primaryColorHex;
+  
+  /// Secondary brand color (hex code)
+  final String? secondaryColorHex;
+  
+  /// Business website URL
+  final String? websiteUrl;
+  
+  /// Facebook page URL
+  final String? facebookUrl;
+  
+  /// Instagram handle/URL
+  final String? instagramUrl;
+  
+  /// Twitter handle/URL
+  final String? twitterUrl;
+  
+  /// Weekly business hours
+  @JsonKey(defaultValue: [])
+  final List<BusinessHoursModel> weeklyHours;
+  
+  /// Cancellation window in hours
+  final int cancellationWindowHours;
+  
+  /// Late policy text (shown to clients)
+  final String latePolicyText;
+  
+  /// No-show policy text (shown to clients)
+  final String noShowPolicyText;
+  
+  /// General booking policy text
+  final String bookingPolicyText;
+  
+  /// Timezone for the business
+  final String timezone;
+  
+  /// Google Calendar ID for syncing appointments
+  final String? googleCalendarId;
+  
+  /// Stripe publishable key
+  final String? stripePublishableKey;
+  
+  /// Stripe secret key (stored securely, not in client app)
+  final String? stripeSecretKey;
+  
+  /// Timestamp when settings were created
+  @JsonKey(fromJson: _timestampFromJson, toJson: _timestampToJson)
+  final DateTime createdAt;
+  
+  /// Timestamp when settings were last updated
+  @JsonKey(fromJson: _timestampFromJson, toJson: _timestampToJson)
+  final DateTime updatedAt;
+
+  // MARK: - Constructor
+  const BusinessSettingsModel({
+    required this.id,
+    required this.businessName,
+    required this.businessEmail,
+    required this.businessPhone,
+    this.businessAddress,
+    this.logoUrl,
+    this.primaryColorHex,
+    this.secondaryColorHex,
+    this.websiteUrl,
+    this.facebookUrl,
+    this.instagramUrl,
+    this.twitterUrl,
+    this.weeklyHours = const [],
+    this.cancellationWindowHours = 24,
+    this.latePolicyText = '',
+    this.noShowPolicyText = '',
+    this.bookingPolicyText = '',
+    this.timezone = 'America/New_York',
+    this.googleCalendarId,
+    this.stripePublishableKey,
+    this.stripeSecretKey,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  // MARK: - Factory Constructors
+  /// Create a BusinessSettingsModel from Firestore document
+  factory BusinessSettingsModel.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return BusinessSettingsModel.fromJson({
+      'id': doc.id,
+      ...data,
+    });
+  }
+
+  /// Create a BusinessSettingsModel from JSON
+  factory BusinessSettingsModel.fromJson(Map<String, dynamic> json) =>
+      _$BusinessSettingsModelFromJson(json);
+
+  /// Create default business settings
+  factory BusinessSettingsModel.createDefault({
+    required String businessName,
+    required String businessEmail,
+    required String businessPhone,
+  }) {
+    final now = DateTime.now();
+    return BusinessSettingsModel(
+      id: 'main',
+      businessName: businessName,
+      businessEmail: businessEmail,
+      businessPhone: businessPhone,
+      cancellationWindowHours: 24,
+      latePolicyText: 'Please arrive on time for your appointment. Late arrivals may result in shortened service time.',
+      noShowPolicyText: 'Deposits are non-refundable for no-shows. Please cancel at least 24 hours in advance.',
+      bookingPolicyText: 'A non-refundable deposit is required to confirm your appointment.',
+      timezone: 'America/New_York',
+      weeklyHours: [],
+      createdAt: now,
+      updatedAt: now,
+    );
+  }
+
+  // MARK: - Conversion Methods
+  /// Convert BusinessSettingsModel to JSON
+  Map<String, dynamic> toJson() => _$BusinessSettingsModelToJson(this);
+
+  /// Convert BusinessSettingsModel to Firestore document data
+  Map<String, dynamic> toFirestore() {
+    final json = toJson();
+    json.remove('id'); // Firestore handles ID separately
+    return json;
+  }
+
+  // MARK: - Helper Methods
+  /// Get business hours for a specific day
+  BusinessHoursModel? getHoursForDay(int dayOfWeek) {
+    try {
+      return weeklyHours.firstWhere(
+        (hours) => hours.dayOfWeek == dayOfWeek,
+      );
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Check if business is open on a specific day
+  bool isOpenOnDay(int dayOfWeek) {
+    final hours = getHoursForDay(dayOfWeek);
+    return hours?.isOpen ?? false;
+  }
+
+  /// Create a copy with updated fields
+  BusinessSettingsModel copyWith({
+    String? id,
+    String? businessName,
+    String? businessEmail,
+    String? businessPhone,
+    String? businessAddress,
+    String? logoUrl,
+    String? primaryColorHex,
+    String? secondaryColorHex,
+    String? websiteUrl,
+    String? facebookUrl,
+    String? instagramUrl,
+    String? twitterUrl,
+    List<BusinessHoursModel>? weeklyHours,
+    int? cancellationWindowHours,
+    String? latePolicyText,
+    String? noShowPolicyText,
+    String? bookingPolicyText,
+    String? timezone,
+    String? googleCalendarId,
+    String? stripePublishableKey,
+    String? stripeSecretKey,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return BusinessSettingsModel(
+      id: id ?? this.id,
+      businessName: businessName ?? this.businessName,
+      businessEmail: businessEmail ?? this.businessEmail,
+      businessPhone: businessPhone ?? this.businessPhone,
+      businessAddress: businessAddress ?? this.businessAddress,
+      logoUrl: logoUrl ?? this.logoUrl,
+      primaryColorHex: primaryColorHex ?? this.primaryColorHex,
+      secondaryColorHex: secondaryColorHex ?? this.secondaryColorHex,
+      websiteUrl: websiteUrl ?? this.websiteUrl,
+      facebookUrl: facebookUrl ?? this.facebookUrl,
+      instagramUrl: instagramUrl ?? this.instagramUrl,
+      twitterUrl: twitterUrl ?? this.twitterUrl,
+      weeklyHours: weeklyHours ?? this.weeklyHours,
+      cancellationWindowHours: cancellationWindowHours ?? this.cancellationWindowHours,
+      latePolicyText: latePolicyText ?? this.latePolicyText,
+      noShowPolicyText: noShowPolicyText ?? this.noShowPolicyText,
+      bookingPolicyText: bookingPolicyText ?? this.bookingPolicyText,
+      timezone: timezone ?? this.timezone,
+      googleCalendarId: googleCalendarId ?? this.googleCalendarId,
+      stripePublishableKey: stripePublishableKey ?? this.stripePublishableKey,
+      stripeSecretKey: stripeSecretKey ?? this.stripeSecretKey,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? DateTime.now(),
+    );
+  }
+
+  // MARK: - Equatable
+  @override
+  List<Object?> get props => [
+        id,
+        businessName,
+        businessEmail,
+        businessPhone,
+        businessAddress,
+        logoUrl,
+        primaryColorHex,
+        secondaryColorHex,
+        websiteUrl,
+        facebookUrl,
+        instagramUrl,
+        twitterUrl,
+        weeklyHours,
+        cancellationWindowHours,
+        latePolicyText,
+        noShowPolicyText,
+        bookingPolicyText,
+        timezone,
+        googleCalendarId,
+        stripePublishableKey,
+        createdAt,
+        updatedAt,
+      ];
+
+  // MARK: - Timestamp Helpers
+  static DateTime _timestampFromJson(dynamic timestamp) {
+    if (timestamp is Timestamp) {
+      return timestamp.toDate();
+    } else if (timestamp is String) {
+      return DateTime.parse(timestamp);
+    } else if (timestamp is int) {
+      return DateTime.fromMillisecondsSinceEpoch(timestamp);
+    }
+    return DateTime.now();
+  }
+
+  static dynamic _timestampToJson(DateTime dateTime) {
+    return Timestamp.fromDate(dateTime);
+  }
+}
+
+// Suggestions For Features and Additions Later:
+// - Add multiple location support
+// - Add staff member management
+// - Add service-specific availability
+// - Add holiday/vacation calendar
+// - Add automated email templates customization

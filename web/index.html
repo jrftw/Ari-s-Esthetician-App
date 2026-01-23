@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root,
+    change the href value below to reflect the base path you are
+    serving from.
+
+    The path provided below has to start and end with a slash "/" in
+    order for it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the
+    value of the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Ari's Esthetician App - Book your appointment online">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Ari's Esthetician">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>Ari's Esthetician App</title>
+  <link rel="manifest" href="manifest.json">
+
+  <script>
+    // Debug logging
+    console.log('🔍 HTML loaded - Flutter scripts starting...');
+    
+    // Global error handler
+    window.addEventListener('error', function(event) {
+      console.error('🔍 ❌ GLOBAL ERROR:', event.error);
+      console.error('🔍 Error message:', event.message);
+      console.error('🔍 Error source:', event.filename, ':', event.lineno);
+    });
+    
+    // Unhandled promise rejection handler
+    window.addEventListener('unhandledrejection', function(event) {
+      console.error('🔍 ❌ UNHANDLED PROMISE REJECTION:', event.reason);
+    });
+  </script>
+  
+  <!-- Standard Flutter web initialization -->
+  <script src="flutter.js" defer></script>
+</head>
+<body>
+  <script>
+    console.log('🔍 Body script executing...');
+    
+    window.addEventListener('load', function() {
+      console.log('🔍 Window load event fired');
+      console.log('🔍 Waiting for Flutter to initialize...');
+      
+      // Wait for Flutter to fully set up buildConfig
+      // DO NOT manually set buildConfig - let Flutter's dev server do it
+      function waitForFlutterReady() {
+        if (typeof _flutter === 'undefined') {
+          console.log('🔍 Waiting for _flutter...');
+          setTimeout(waitForFlutterReady, 100);
+          return;
+        }
+        
+        console.log('🔍 _flutter found');
+        console.log('🔍 _flutter keys:', Object.keys(_flutter));
+        
+        // Check if buildConfig exists (it should be set by Flutter's dev server)
+        if (!_flutter.buildConfig) {
+          console.log('🔍 ⚠️ buildConfig not yet set, waiting...');
+          // Wait for Flutter's dev server to set it
+          setTimeout(waitForFlutterReady, 100);
+          return;
+        }
+        
+        console.log('🔍 ✅ buildConfig is available');
+        console.log('🔍 buildConfig keys:', Object.keys(_flutter.buildConfig));
+        
+        // Now it's safe to call load()
+        if (_flutter.loader && _flutter.loader.load) {
+          console.log('🔍 Calling _flutter.loader.load()...');
+          try {
+            _flutter.loader.load({
+              onEntrypointLoaded: function(engineInitializer) {
+                console.log('🔍 ✅ Entrypoint loaded!');
+                engineInitializer.initializeEngine().then(function(appRunner) {
+                  console.log('🔍 ✅ Engine initialized!');
+                  appRunner.runApp();
+                  console.log('🔍 ✅ App running!');
+                }).catch(function(error) {
+                  console.error('🔍 ❌ ERROR initializing engine:', error);
+                  document.body.innerHTML = '<div style="padding: 20px; font-family: Arial; color: red;"><h1>Error Initializing Flutter Engine</h1><p>' + error.toString() + '</p></div>';
+                });
+              },
+              onError: function(error) {
+                console.error('🔍 ❌ ERROR loading entrypoint:', error);
+                document.body.innerHTML = '<div style="padding: 20px; font-family: Arial; color: red;"><h1>Error Loading Flutter App</h1><p>' + error.toString() + '</p></div>';
+              }
+            });
+          } catch (error) {
+            console.error('🔍 ❌ ERROR in load() call:', error);
+            console.error('🔍 Error details:', error.message, error.stack);
+            document.body.innerHTML = '<div style="padding: 20px; font-family: Arial; color: red;"><h1>Error Loading Flutter</h1><p>' + error.toString() + '</p></div>';
+          }
+        } else {
+          console.error('🔍 ❌ _flutter.loader or load() not found');
+          document.body.innerHTML = '<div style="padding: 20px; font-family: Arial; color: red;"><h1>Flutter Loader Not Available</h1></div>';
+        }
+      }
+      
+      // Start waiting
+      waitForFlutterReady();
+    });
+    
+    console.log('🔍 Event listeners registered');
+  </script>
+</body>
+</html>
