@@ -377,7 +377,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        'Version ${AppVersion.versionStringShort}',
+                        'Version ${AppVersion.versionString}',
                         style: AppTypography.bodySmall.copyWith(
                           color: AppColors.textSecondary,
                         ),

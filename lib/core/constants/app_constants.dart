@@ -51,7 +51,7 @@ class AppConstants {
   static const int defaultCancellationWindowHours = 24;
   
   /// Minimum appointment duration in minutes
-  static const int minAppointmentDuration = 15;
+  static const int minAppointmentDuration = 1;
   
   /// Maximum appointment duration in minutes
   static const int maxAppointmentDuration = 480; // 8 hours
@@ -79,11 +79,17 @@ class AppConstants {
   /// Business settings collection name
   static const String firestoreBusinessSettingsCollection = "business_settings";
   
+  /// Service categories collection name
+  static const String firestoreServiceCategoriesCollection = "serviceCategories";
+  
   /// Payments collection name
   static const String firestorePaymentsCollection = "payments";
   
   /// Availability collection name
   static const String firestoreAvailabilityCollection = "availability";
+  
+  /// App version collection name
+  static const String firestoreAppVersionCollection = "app_version";
 
   // MARK: - Storage Paths
   /// Logo storage path
@@ -119,6 +125,12 @@ class AppConstants {
   
   /// Admin settings route
   static const String routeAdminSettings = "/admin/settings";
+  
+  /// Admin categories route
+  static const String routeAdminCategories = "/admin/categories";
+  
+  /// General settings route (accessible to all users)
+  static const String routeSettings = "/settings";
 
   // MARK: - Validation Constants
   /// Minimum name length

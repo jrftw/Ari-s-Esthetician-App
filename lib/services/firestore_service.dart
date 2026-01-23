@@ -10,6 +10,7 @@
 // MARK: - Imports
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/service_model.dart';
+import '../models/service_category_model.dart';
 import '../models/appointment_model.dart';
 import '../models/client_model.dart';
 import '../models/business_settings_model.dart';
@@ -554,6 +555,180 @@ class FirestoreService {
     } catch (e, stackTrace) {
       AppLogger().logError(
         'Failed to update business settings',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  // MARK: - Service Category Operations
+  /// Get all active categories
+  /// Returns categories sorted by sortOrder, then name
+  Future<List<ServiceCategoryModel>> getActiveCategories() async {
+    try {
+      final snapshot = await _firestore
+          .collection(AppConstants.firestoreServiceCategoriesCollection)
+          .where('isActive', isEqualTo: true)
+          .orderBy('sortOrder')
+          .orderBy('name')
+          .get();
+
+      final categories = snapshot.docs
+          .map((doc) => ServiceCategoryModel.fromFirestore(doc))
+          .toList();
+
+      AppLogger().logInfo('Loaded ${categories.length} active categories', tag: 'FirestoreService');
+      return categories;
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to get active categories',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Get all categories (including inactive)
+  /// Returns categories sorted by isActive (active first), then sortOrder, then name
+  Future<List<ServiceCategoryModel>> getAllCategories() async {
+    try {
+      final snapshot = await _firestore
+          .collection(AppConstants.firestoreServiceCategoriesCollection)
+          .orderBy('isActive', descending: true)
+          .orderBy('sortOrder')
+          .orderBy('name')
+          .get();
+
+      final categories = snapshot.docs
+          .map((doc) => ServiceCategoryModel.fromFirestore(doc))
+          .toList();
+
+      AppLogger().logInfo('Loaded ${categories.length} categories', tag: 'FirestoreService');
+      return categories;
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to get all categories',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Get categories stream (real-time updates)
+  /// Returns only active categories
+  Stream<List<ServiceCategoryModel>> getActiveCategoriesStream() {
+    try {
+      return _firestore
+          .collection(AppConstants.firestoreServiceCategoriesCollection)
+          .where('isActive', isEqualTo: true)
+          .orderBy('sortOrder')
+          .orderBy('name')
+          .snapshots()
+          .map((snapshot) {
+            return snapshot.docs
+                .map((doc) => ServiceCategoryModel.fromFirestore(doc))
+                .toList();
+          });
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to get active categories stream',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Get a category by ID
+  Future<ServiceCategoryModel?> getCategoryById(String categoryId) async {
+    try {
+      final doc = await _firestore
+          .collection(AppConstants.firestoreServiceCategoriesCollection)
+          .doc(categoryId)
+          .get();
+
+      if (!doc.exists) return null;
+      return ServiceCategoryModel.fromFirestore(doc);
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to get category by ID',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Create a new category
+  Future<String> createCategory(ServiceCategoryModel category) async {
+    try {
+      final docRef = await _firestore
+          .collection(AppConstants.firestoreServiceCategoriesCollection)
+          .add(category.toFirestore());
+
+      AppLogger().logInfo('Category created: ${docRef.id}', tag: 'FirestoreService');
+      return docRef.id;
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to create category',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Update an existing category
+  Future<void> updateCategory(ServiceCategoryModel category) async {
+    try {
+      await _firestore
+          .collection(AppConstants.firestoreServiceCategoriesCollection)
+          .doc(category.id)
+          .update(category.copyWith(updatedAt: DateTime.now()).toFirestore());
+
+      AppLogger().logInfo('Category updated: ${category.id}', tag: 'FirestoreService');
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to update category',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Soft delete a category (set isActive to false)
+  /// Does NOT update services that reference this category
+  Future<void> deleteCategory(String categoryId) async {
+    try {
+      final category = await getCategoryById(categoryId);
+      if (category == null) {
+        throw Exception('Category not found: $categoryId');
+      }
+
+      // Soft delete: set isActive to false
+      await _firestore
+          .collection(AppConstants.firestoreServiceCategoriesCollection)
+          .doc(categoryId)
+          .update({
+        'isActive': false,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      AppLogger().logInfo('Category soft deleted: $categoryId', tag: 'FirestoreService');
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to delete category',
         tag: 'FirestoreService',
         error: e,
         stackTrace: stackTrace,

@@ -52,6 +52,8 @@ BusinessSettingsModel _$BusinessSettingsModelFromJson(
       googleCalendarId: json['googleCalendarId'] as String?,
       stripePublishableKey: json['stripePublishableKey'] as String?,
       stripeSecretKey: json['stripeSecretKey'] as String?,
+      minDepositAmountCents: (json['minDepositAmountCents'] as num?)?.toInt(),
+      cancellationFeeCents: (json['cancellationFeeCents'] as num?)?.toInt(),
       createdAt: BusinessSettingsModel._timestampFromJson(json['createdAt']),
       updatedAt: BusinessSettingsModel._timestampFromJson(json['updatedAt']),
     );
@@ -80,6 +82,8 @@ Map<String, dynamic> _$BusinessSettingsModelToJson(
       'googleCalendarId': instance.googleCalendarId,
       'stripePublishableKey': instance.stripePublishableKey,
       'stripeSecretKey': instance.stripeSecretKey,
+      'minDepositAmountCents': instance.minDepositAmountCents,
+      'cancellationFeeCents': instance.cancellationFeeCents,
       'createdAt': BusinessSettingsModel._timestampToJson(instance.createdAt),
       'updatedAt': BusinessSettingsModel._timestampToJson(instance.updatedAt),
     };

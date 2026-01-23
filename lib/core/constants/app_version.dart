@@ -34,7 +34,7 @@ class AppVersion {
   static const String version = "1.0.0";
   
   /// Build number (incremented with each build)
-  static const int buildNumber = 1;
+  static const int buildNumber = 2;
   
   /// Current app environment
   /// Change this to switch between dev, beta, and production

@@ -18,6 +18,7 @@ import '../../core/constants/app_typography.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/logging/app_logger.dart';
 import '../../models/service_model.dart';
+import '../../models/service_category_model.dart';
 import '../../models/appointment_model.dart';
 import '../../services/firestore_service.dart';
 import '../../services/view_mode_service.dart';
@@ -55,13 +56,20 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
   bool _isAdminViewingAsClient = false;
   BookingStep _currentStep = BookingStep.serviceSelection;
   List<ServiceModel> _services = [];
-  ServiceModel? _selectedService;
+  List<ServiceModel> _filteredServices = [];
+  List<ServiceModel> _selectedServices = [];
+  final TextEditingController _searchController = TextEditingController();
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
   DateTime? _selectedDateTime;
   bool _isLoadingServices = true;
   bool _isSubmitting = false;
   String? _errorMessage;
+  
+  // MARK: - Category State Variables
+  List<ServiceCategoryModel> _categories = [];
+  bool _isLoadingCategories = true;
+  String? _selectedCategoryId; // null = "All", empty string = "Other" (Uncategorized)
   
   // MARK: - Form Controllers
   final _formKey = GlobalKey<FormState>();
@@ -79,12 +87,17 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
   // MARK: - Available Time Slots
   List<TimeOfDay> _availableTimeSlots = [];
   
+  // MARK: - Description Expansion State
+  /// Set of service IDs whose descriptions are currently expanded
+  final Set<String> _expandedDescriptions = {};
+  
   @override
   void initState() {
     super.initState();
     logUI('ClientBookingScreen initState called', tag: 'ClientBookingScreen');
     logWidgetLifecycle('ClientBookingScreen', 'initState', tag: 'ClientBookingScreen');
     _loadServices();
+    _loadCategories();
     _generateTimeSlots();
     _checkAdminViewMode();
     
@@ -118,6 +131,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
   @override
   void dispose() {
     _viewModeService.removeListener(_onViewModeChanged);
+    _searchController.dispose();
     _firstNameController.dispose();
     _lastNameController.dispose();
     _emailController.dispose();
@@ -141,6 +155,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
       
       setState(() {
         _services = services;
+        _applyFilters(); // Apply current category and search filters
         _isLoadingServices = false;
       });
     } catch (e, stackTrace) {
@@ -148,6 +163,32 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
       setState(() {
         _isLoadingServices = false;
         _errorMessage = 'Failed to load services. Please try again.';
+      });
+    }
+  }
+  
+  // MARK: - Category Loading
+  /// Load active categories from Firestore
+  Future<void> _loadCategories() async {
+    try {
+      logLoading('Loading categories...', tag: 'ClientBookingScreen');
+      setState(() {
+        _isLoadingCategories = true;
+      });
+      
+      final categories = await _firestoreService.getActiveCategories();
+      logSuccess('Loaded ${categories.length} categories', tag: 'ClientBookingScreen');
+      
+      setState(() {
+        _categories = categories;
+        _isLoadingCategories = false;
+      });
+    } catch (e, stackTrace) {
+      logError('Failed to load categories', tag: 'ClientBookingScreen', error: e, stackTrace: stackTrace);
+      // Don't show error to user - categories are optional, services will still work
+      setState(() {
+        _categories = [];
+        _isLoadingCategories = false;
       });
     }
   }
@@ -162,12 +203,85 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
     }
   }
   
+  // MARK: - Service Filtering
+  /// Apply all filters (category and search) to services
+  void _applyFilters() {
+    List<ServiceModel> filtered = List.from(_services);
+    
+    // Apply category filter
+    if (_selectedCategoryId != null) {
+      if (_selectedCategoryId!.isEmpty) {
+        // "Other" tab: services with no category (null, empty, or missing categoryId)
+        filtered = filtered.where((service) {
+          return service.categoryId == null || 
+                 service.categoryId!.isEmpty ||
+                 // Check if category is inactive or missing
+                 !_categories.any((cat) => cat.id == service.categoryId && cat.isActive);
+        }).toList();
+      } else {
+        // Specific category tab
+        filtered = filtered.where((service) {
+          return service.categoryId == _selectedCategoryId;
+        }).toList();
+      }
+    }
+    // If _selectedCategoryId is null, show all services (no category filter)
+    
+    // Apply search filter
+    final searchQuery = _searchController.text.trim();
+    if (searchQuery.isNotEmpty) {
+      final lowerQuery = searchQuery.toLowerCase();
+      filtered = filtered.where((service) {
+        return service.name.toLowerCase().contains(lowerQuery) ||
+            service.description.toLowerCase().contains(lowerQuery);
+      }).toList();
+    }
+    
+    setState(() {
+      _filteredServices = filtered;
+    });
+    
+    logInfo('Filtered services: ${_filteredServices.length} of ${_services.length} (category: ${_selectedCategoryId ?? "All"}, search: "${searchQuery}")', 
+            tag: 'ClientBookingScreen');
+  }
+  
+  /// Filter services based on search query
+  void _filterServices(String query) {
+    _applyFilters();
+  }
+  
+  /// Select a category tab
+  void _selectCategory(String? categoryId) {
+    logUI('Category selected: ${categoryId ?? "All"}', tag: 'ClientBookingScreen');
+    setState(() {
+      _selectedCategoryId = categoryId;
+    });
+    _applyFilters();
+  }
+  
+  // MARK: - Service Selection
+  /// Toggle service selection (add/remove from selected list)
+  void _toggleServiceSelection(ServiceModel service) {
+    setState(() {
+      if (_selectedServices.any((s) => s.id == service.id)) {
+        _selectedServices.removeWhere((s) => s.id == service.id);
+      } else {
+        _selectedServices.add(service);
+      }
+    });
+  }
+  
+  /// Check if service is selected
+  bool _isServiceSelected(ServiceModel service) {
+    return _selectedServices.any((s) => s.id == service.id);
+  }
+  
   // MARK: - Step Navigation
   /// Move to next step in booking process
   void _nextStep() {
     if (_currentStep == BookingStep.serviceSelection) {
-      if (_selectedService == null) {
-        _showError('Please select a service');
+      if (_selectedServices.isEmpty) {
+        _showError('Please select at least one service');
         return;
       }
       setState(() {
@@ -241,7 +355,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
   // MARK: - Payment Processing
   /// Process Stripe payment
   Future<void> _processPayment() async {
-    if (_selectedService == null || _selectedDateTime == null) {
+    if (_selectedServices.isEmpty || _selectedDateTime == null) {
       _showError('Missing booking information');
       return;
     }
@@ -273,33 +387,60 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
   
   // MARK: - Booking Submission
   /// Submit booking to Firestore
+  /// Creates multiple appointments if multiple services are selected
   Future<void> _submitBooking() async {
     try {
       logLoading('Submitting booking...', tag: 'ClientBookingScreen');
       
-      // Create appointment model
-      final appointment = AppointmentModel.create(
-        serviceId: _selectedService!.id,
-        serviceSnapshot: _selectedService,
-        clientFirstName: _firstNameController.text.trim(),
-        clientLastName: _lastNameController.text.trim(),
-        clientEmail: _emailController.text.trim(),
-        clientPhone: _phoneController.text.trim(),
-        intakeNotes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
-        startTime: _selectedDateTime!,
-        durationMinutes: _selectedService!.durationMinutes,
-        depositAmountCents: _selectedService!.depositAmountCents,
-        stripePaymentIntentId: null, // TODO: Add after Stripe integration
+      // Calculate total deposit for all services
+      final totalDepositCents = _selectedServices.fold<int>(
+        0,
+        (sum, service) => sum + service.depositAmountCents,
       );
       
-      // Create appointment in Firestore
-      final appointmentId = await _firestoreService.createAppointment(appointment);
+      // Create appointments for each selected service
+      // Services will be scheduled sequentially (one after another)
+      DateTime currentStartTime = _selectedDateTime!;
+      List<String> appointmentIds = [];
       
-      logSuccess('Booking submitted successfully: $appointmentId', tag: 'ClientBookingScreen');
+      for (int i = 0; i < _selectedServices.length; i++) {
+        final service = _selectedServices[i];
+        
+        // Create appointment model
+        final appointment = AppointmentModel.create(
+          serviceId: service.id,
+          serviceSnapshot: service,
+          clientFirstName: _firstNameController.text.trim(),
+          clientLastName: _lastNameController.text.trim(),
+          clientEmail: _emailController.text.trim(),
+          clientPhone: _phoneController.text.trim(),
+          intakeNotes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
+          startTime: currentStartTime,
+          durationMinutes: service.durationMinutes,
+          depositAmountCents: service.depositAmountCents,
+          stripePaymentIntentId: null, // TODO: Add after Stripe integration
+        );
+        
+        // Create appointment in Firestore
+        final appointmentId = await _firestoreService.createAppointment(appointment);
+        appointmentIds.add(appointmentId);
+        
+        // Calculate next service start time (current end time + buffer)
+        currentStartTime = currentStartTime.add(
+          Duration(
+            minutes: service.durationMinutes + service.bufferTimeAfterMinutes,
+          ),
+        );
+        
+        logInfo('Created appointment $appointmentId for service ${service.name}', tag: 'ClientBookingScreen');
+      }
       
-      // Navigate to confirmation screen
-      if (mounted) {
-        context.go('${AppConstants.routeClientConfirmation}/$appointmentId');
+      logSuccess('Booking submitted successfully: ${appointmentIds.length} appointment(s) created', tag: 'ClientBookingScreen');
+      
+      // Navigate to confirmation screen with first appointment ID
+      // The confirmation screen can be updated later to show all appointments
+      if (mounted && appointmentIds.isNotEmpty) {
+        context.go('${AppConstants.routeClientConfirmation}/${appointmentIds.first}');
       }
     } catch (e, stackTrace) {
       logError('Failed to submit booking', tag: 'ClientBookingScreen', error: e, stackTrace: stackTrace);
@@ -328,6 +469,16 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                 onPressed: _previousStep,
               )
             : null,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              logInfo('Settings button tapped', tag: 'ClientBookingScreen');
+              context.push(AppConstants.routeSettings);
+            },
+            tooltip: 'Settings',
+          ),
+        ],
       ),
       body: SafeArea(
         child: Column(
@@ -617,7 +768,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Select a Service',
+          'Select Service(s)',
           style: AppTypography.headlineSmall.copyWith(
             color: AppColors.darkBrown,
             fontWeight: FontWeight.bold,
@@ -625,20 +776,186 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Choose the service you\'d like to book',
+          'Choose one or more services to book',
           style: AppTypography.bodyMedium.copyWith(
             color: AppColors.textSecondary,
           ),
         ),
         const SizedBox(height: 24),
-        ..._services.map((service) => _buildServiceCard(service)),
+        
+        // Category Tabs
+        _buildCategoryTabs(),
+        const SizedBox(height: 16),
+        
+        // Search Bar
+        TextField(
+          controller: _searchController,
+          decoration: InputDecoration(
+            hintText: 'Search services...',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _searchController.text.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear),
+                    onPressed: () {
+                      _searchController.clear();
+                      _filterServices('');
+                    },
+                  )
+                : null,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+            ),
+            filled: true,
+            fillColor: Colors.white,
+          ),
+          onChanged: _filterServices,
+        ),
+        const SizedBox(height: 16),
+        
+        // Selected Services Count
+        if (_selectedServices.isNotEmpty)
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.sunflowerYellow.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+              border: Border.all(
+                color: AppColors.sunflowerYellow.withOpacity(0.3),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.check_circle,
+                  color: AppColors.sunflowerYellow,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${_selectedServices.length} service${_selectedServices.length > 1 ? 's' : ''} selected',
+                  style: AppTypography.bodyMedium.copyWith(
+                    color: AppColors.darkBrown,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 16),
+        
+        // Service List
+        if (_filteredServices.isEmpty)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(48.0),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.search_off,
+                    size: 64,
+                    color: AppColors.textSecondary,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No services found',
+                    style: AppTypography.titleMedium.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Try a different search term',
+                    style: AppTypography.bodyMedium.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          ..._filteredServices.map((service) => _buildServiceCard(service)),
       ],
+    );
+  }
+  
+  // MARK: - Category Tabs Builder
+  /// Build category tabs/chips for filtering services
+  Widget _buildCategoryTabs() {
+    // Build list of category tabs: "All", then each active category, then "Other"
+    final tabs = <_CategoryTab>[];
+    
+    // "All" tab
+    tabs.add(_CategoryTab(
+      id: null,
+      name: 'All',
+      count: _services.length,
+    ));
+    
+    // Active category tabs
+    for (final category in _categories) {
+      final count = _services.where((s) => s.categoryId == category.id).length;
+      if (count > 0) {
+        tabs.add(_CategoryTab(
+          id: category.id,
+          name: category.name,
+          count: count,
+        ));
+      }
+    }
+    
+    // "Other" tab (uncategorized services)
+    final uncategorizedCount = _services.where((s) {
+      return s.categoryId == null || 
+             s.categoryId!.isEmpty ||
+             !_categories.any((cat) => cat.id == s.categoryId && cat.isActive);
+    }).length;
+    
+    if (uncategorizedCount > 0) {
+      tabs.add(_CategoryTab(
+        id: '',
+        name: 'Other',
+        count: uncategorizedCount,
+      ));
+    }
+    
+    // Don't show tabs if there's only "All" or no categories
+    if (tabs.length <= 1) {
+      return const SizedBox.shrink();
+    }
+    
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: tabs.map((tab) {
+          final isSelected = _selectedCategoryId == tab.id;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: FilterChip(
+              label: Text('${tab.name} (${tab.count})'),
+              selected: isSelected,
+              onSelected: (selected) {
+                if (selected) {
+                  _selectCategory(tab.id);
+                }
+              },
+              selectedColor: AppColors.sunflowerYellow,
+              checkmarkColor: AppColors.darkBrown,
+              labelStyle: AppTypography.bodyMedium.copyWith(
+                color: isSelected ? AppColors.darkBrown : AppColors.textPrimary,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          );
+        }).toList(),
+      ),
     );
   }
   
   /// Build individual service card
   Widget _buildServiceCard(ServiceModel service) {
-    final isSelected = _selectedService?.id == service.id;
+    final isSelected = _isServiceSelected(service);
+    final isDescriptionExpanded = _expandedDescriptions.contains(service.id);
     
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -661,21 +978,21 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
       ),
       child: InkWell(
         onTap: () {
-          setState(() {
-            _selectedService = service;
-          });
+          _toggleServiceSelection(service);
         },
         borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Selection Indicator
+              // Selection Indicator (Checkbox)
               Container(
                 width: 24,
                 height: 24,
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
+                  shape: BoxShape.rectangle,
+                  borderRadius: BorderRadius.circular(4),
                   border: Border.all(
                     color: isSelected
                         ? AppColors.sunflowerYellow
@@ -709,14 +1026,8 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      service.description,
-                      style: AppTypography.bodySmall.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    // Description with expand/collapse functionality
+                    _buildServiceDescription(service, isDescriptionExpanded),
                     const SizedBox(height: 8),
                     Row(
                       children: [
@@ -749,6 +1060,75 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
           ),
         ),
       ),
+    );
+  }
+  
+  // MARK: - Service Description Builder
+  /// Build service description with "View more" / "View less" toggle
+  /// Uses LayoutBuilder to measure if text exceeds 2 lines and shows toggle accordingly
+  Widget _buildServiceDescription(ServiceModel service, bool isExpanded) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Measure if text exceeds 2 lines at the available width
+        final textPainter = TextPainter(
+          text: TextSpan(
+            text: service.description,
+            style: AppTypography.bodySmall.copyWith(
+              color: AppColors.textSecondary,
+            ),
+          ),
+          maxLines: 2,
+          textDirection: TextDirection.ltr,
+        );
+        textPainter.layout(maxWidth: constraints.maxWidth);
+        final needsExpansion = textPainter.didExceedMaxLines;
+        
+        // If description is short, just show it without toggle
+        if (!needsExpansion) {
+          return Text(
+            service.description,
+            style: AppTypography.bodySmall.copyWith(
+              color: AppColors.textSecondary,
+            ),
+          );
+        }
+        
+        // Description is long, show with expand/collapse
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              service.description,
+              style: AppTypography.bodySmall.copyWith(
+                color: AppColors.textSecondary,
+              ),
+              maxLines: isExpanded ? null : 2,
+              overflow: isExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 4),
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  if (isExpanded) {
+                    _expandedDescriptions.remove(service.id);
+                  } else {
+                    _expandedDescriptions.add(service.id);
+                  }
+                });
+                logUI('Toggled description expansion for service ${service.id}', tag: 'ClientBookingScreen');
+              },
+              child: Text(
+                isExpanded ? 'View less' : 'View more',
+                style: AppTypography.bodySmall.copyWith(
+                  color: AppColors.sunflowerYellow,
+                  fontWeight: FontWeight.bold,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
   
@@ -1038,16 +1418,44 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                _buildSummaryRow('Service', _selectedService?.name ?? ''),
+                // Selected Services
+                if (_selectedServices.length == 1)
+                  _buildSummaryRow('Service', _selectedServices.first.name)
+                else
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Services (${_selectedServices.length})',
+                        style: AppTypography.bodyMedium.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      ..._selectedServices.map((service) => Padding(
+                        padding: const EdgeInsets.only(left: 8, bottom: 4),
+                        child: Text(
+                          '• ${service.name}',
+                          style: AppTypography.bodySmall.copyWith(
+                            color: AppColors.darkBrown,
+                          ),
+                        ),
+                      )),
+                    ],
+                  ),
+                const SizedBox(height: 8),
                 _buildSummaryRow('Date', _selectedDate != null
                     ? '${_selectedDate!.month}/${_selectedDate!.day}/${_selectedDate!.year}'
                     : ''),
                 _buildSummaryRow('Time', _selectedTime != null ? _formatTimeOfDay(_selectedTime!) : ''),
-                _buildSummaryRow('Duration', '${_selectedService?.durationMinutes ?? 0} minutes'),
+                _buildSummaryRow(
+                  'Total Duration',
+                  '${_selectedServices.fold<int>(0, (sum, s) => sum + s.durationMinutes)} minutes',
+                ),
                 const Divider(),
                 _buildSummaryRow(
-                  'Deposit Required',
-                  _selectedService?.formattedDeposit ?? '\$0.00',
+                  'Total Deposit Required',
+                  '\$${(_selectedServices.fold<int>(0, (sum, s) => sum + s.depositAmountCents) / 100).toStringAsFixed(2)}',
                   isBold: true,
                 ),
               ],
@@ -1137,6 +1545,20 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
         return 'Continue';
     }
   }
+}
+
+// MARK: - Category Tab Helper Class
+/// Helper class for category tab data
+class _CategoryTab {
+  final String? id; // null = "All", empty string = "Other"
+  final String name;
+  final int count;
+  
+  _CategoryTab({
+    required this.id,
+    required this.name,
+    required this.count,
+  });
 }
 
 // Suggestions For Features and Additions Later:

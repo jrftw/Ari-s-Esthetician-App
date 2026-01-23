@@ -113,6 +113,14 @@ class BusinessSettingsModel extends Equatable {
   /// Stripe secret key (stored securely, not in client app)
   final String? stripeSecretKey;
   
+  /// Minimum deposit amount in cents (nullable - if null, no minimum required)
+  /// Allows business to set custom minimum or disable minimum entirely
+  final int? minDepositAmountCents;
+  
+  /// Cancellation fee in cents (nullable - if null, no cancellation fee)
+  /// Applied when clients cancel appointments within the cancellation window
+  final int? cancellationFeeCents;
+  
   /// Timestamp when settings were created
   @JsonKey(fromJson: _timestampFromJson, toJson: _timestampToJson)
   final DateTime createdAt;
@@ -144,6 +152,8 @@ class BusinessSettingsModel extends Equatable {
     this.googleCalendarId,
     this.stripePublishableKey,
     this.stripeSecretKey,
+    this.minDepositAmountCents,
+    this.cancellationFeeCents,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -262,6 +272,8 @@ class BusinessSettingsModel extends Equatable {
       googleCalendarId: googleCalendarId ?? this.googleCalendarId,
       stripePublishableKey: stripePublishableKey ?? this.stripePublishableKey,
       stripeSecretKey: stripeSecretKey ?? this.stripeSecretKey,
+      minDepositAmountCents: minDepositAmountCents ?? this.minDepositAmountCents,
+      cancellationFeeCents: cancellationFeeCents ?? this.cancellationFeeCents,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
     );
@@ -290,6 +302,8 @@ class BusinessSettingsModel extends Equatable {
         timezone,
         googleCalendarId,
         stripePublishableKey,
+        minDepositAmountCents,
+        cancellationFeeCents,
         createdAt,
         updatedAt,
       ];

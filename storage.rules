@@ -1,0 +1,89 @@
+/*
+ * Filename: storage.rules
+ * Purpose: Firebase Storage security rules for file uploads and access control
+ * Author: Kevin Doyle Jr. / Infinitum Imagery LLC
+ * Last Modified: 2026-01-22
+ * Dependencies: Firebase Storage
+ * Platform Compatibility: iOS, Android, Web
+ */
+
+// MARK: - Storage Rules Version
+rules_version = '2';
+
+// MARK: - Storage Service
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // MARK: - Helper Functions
+    /// Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    /// Check if user is admin or superAdmin
+    function isAdmin() {
+      return isAuthenticated() && 
+        firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+        (firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'superAdmin');
+    }
+    
+    /// Check if user owns the file
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // MARK: - Business Assets
+    /// Business logo and branding assets - public read, admin write
+    match /business/{allPaths=**} {
+      allow read: if true; // Public read for logo display
+      allow write: if isAdmin();
+    }
+    
+    // MARK: - User Uploads
+    /// User profile pictures - own read/write, admin read/write
+    match /users/{userId}/{allPaths=**} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isOwner(userId) || isAdmin();
+    }
+    
+    // MARK: - Appointment Attachments
+    /// Appointment-related files (photos, notes, etc.) - admin only
+    match /appointments/{appointmentId}/{allPaths=**} {
+      allow read, write: if isAdmin();
+    }
+    
+    // MARK: - Service Images
+    /// Service images - public read, admin write
+    match /services/{serviceId}/{allPaths=**} {
+      allow read: if true; // Public read for service display
+      allow write: if isAdmin();
+    }
+    
+    // MARK: - Client Documents
+    /// Client-related documents (consent forms, photos, etc.) - admin only
+    match /clients/{clientId}/{allPaths=**} {
+      allow read, write: if isAdmin();
+    }
+    
+    // MARK: - Temporary Uploads
+    /// Temporary uploads for processing - authenticated users can write, admin can read/delete
+    match /temp/{userId}/{allPaths=**} {
+      allow read, delete: if isAdmin();
+      allow write: if isAuthenticated() && isOwner(userId);
+    }
+    
+    // MARK: - Default Deny
+    /// Deny all other paths by default
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+// Suggestions For Features and Additions Later:
+// - Add file size limits per path
+// - Add file type restrictions (images only, PDFs only, etc.)
+// - Add virus scanning integration
+// - Add automatic image optimization
+// - Add CDN integration for faster delivery

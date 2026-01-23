@@ -10,6 +10,7 @@
 // MARK: - Imports
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/constants/app_constants.dart';
@@ -62,6 +63,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   final TextEditingController _googleCalendarIdController = TextEditingController();
   final TextEditingController _stripePublishableKeyController = TextEditingController();
   final TextEditingController _stripeSecretKeyController = TextEditingController();
+  final TextEditingController _minDepositAmountController = TextEditingController();
+  final TextEditingController _cancellationFeeController = TextEditingController();
 
   // MARK: - Lifecycle Methods
   @override
@@ -92,6 +95,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     _googleCalendarIdController.dispose();
     _stripePublishableKeyController.dispose();
     _stripeSecretKeyController.dispose();
+    _minDepositAmountController.dispose();
+    _cancellationFeeController.dispose();
     super.dispose();
   }
 
@@ -171,6 +176,12 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     _googleCalendarIdController.text = settings.googleCalendarId ?? '';
     _stripePublishableKeyController.text = settings.stripePublishableKey ?? '';
     _stripeSecretKeyController.text = settings.stripeSecretKey ?? '';
+    _minDepositAmountController.text = settings.minDepositAmountCents != null
+        ? (settings.minDepositAmountCents! / 100).toStringAsFixed(2)
+        : '';
+    _cancellationFeeController.text = settings.cancellationFeeCents != null
+        ? (settings.cancellationFeeCents! / 100).toStringAsFixed(2)
+        : '';
   }
 
   // MARK: - Save Functionality
@@ -281,6 +292,12 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       stripeSecretKey: _stripeSecretKeyController.text.trim().isEmpty 
           ? null 
           : _stripeSecretKeyController.text.trim(),
+      minDepositAmountCents: _minDepositAmountController.text.trim().isEmpty
+          ? null
+          : ((double.tryParse(_minDepositAmountController.text.trim()) ?? 0.0) * 100).toInt(),
+      cancellationFeeCents: _cancellationFeeController.text.trim().isEmpty
+          ? null
+          : ((double.tryParse(_cancellationFeeController.text.trim()) ?? 0.0) * 100).toInt(),
       createdAt: _settings?.createdAt ?? now,
       updatedAt: now,
     );
@@ -304,6 +321,14 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       appBar: AppBar(
         title: const Text('Business Settings'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              AppLogger().logInfo('Settings button tapped', tag: 'AdminSettingsScreen');
+              context.push(AppConstants.routeSettings);
+            },
+            tooltip: 'General Settings',
+          ),
           if (_isSaving)
             const Padding(
               padding: EdgeInsets.all(16.0),
@@ -463,6 +488,56 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                 }
                 return null;
               },
+            ),
+            const SizedBox(height: 16),
+            _buildTextField(
+              controller: _minDepositAmountController,
+              label: 'Minimum Deposit Amount (\$) (Optional)',
+              icon: Icons.payment,
+              hint: '5.00',
+              prefixText: '\$',
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              validator: (value) {
+                if (value != null && value.trim().isNotEmpty) {
+                  final amount = double.tryParse(value);
+                  if (amount == null || amount < 0) {
+                    return 'Please enter a valid amount';
+                  }
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Leave empty to allow any deposit amount (including \$0.00)',
+              style: AppTypography.bodySmall.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _buildTextField(
+              controller: _cancellationFeeController,
+              label: 'Cancellation Fee (\$) (Optional)',
+              icon: Icons.cancel,
+              hint: '25.00',
+              prefixText: '\$',
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              validator: (value) {
+                if (value != null && value.trim().isNotEmpty) {
+                  final amount = double.tryParse(value);
+                  if (amount == null || amount < 0) {
+                    return 'Please enter a valid amount';
+                  }
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Leave empty to disable cancellation fees',
+              style: AppTypography.bodySmall.copyWith(
+                color: AppColors.textSecondary,
+              ),
             ),
             const SizedBox(height: 16),
             _buildTextField(

@@ -21,11 +21,13 @@ import '../../screens/admin/admin_services_screen.dart';
 import '../../screens/admin/admin_appointments_screen.dart';
 import '../../screens/admin/admin_clients_screen.dart';
 import '../../screens/admin/admin_settings_screen.dart';
+import '../../screens/admin/admin_category_management_screen.dart';
 import '../../screens/auth/login_screen.dart';
 import '../../screens/auth/signup_screen.dart';
 import '../../screens/splash_screen.dart';
 import '../../screens/welcome/welcome_screen.dart';
 import '../../screens/welcome/account_choice_screen.dart';
+import '../../screens/settings/settings_screen.dart';
 
 // MARK: - Router Configuration
 /// Application router with role-based routing
@@ -37,7 +39,7 @@ class AppRouter {
   GoRouter get router {
     logRouter('Creating GoRouter instance', tag: 'AppRouter');
     logRouter('Initial location: ${AppConstants.routeClientBooking}', tag: 'AppRouter');
-    logDebug('Total routes: 9', tag: 'AppRouter');
+    logDebug('Total routes: 10', tag: 'AppRouter');
     
     return GoRouter(
       initialLocation: AppConstants.routeWelcome,
@@ -127,6 +129,21 @@ class AppRouter {
           name: 'admin-settings',
           builder: (context, state) => const AdminSettingsScreen(),
         ),
+        GoRoute(
+          path: AppConstants.routeAdminCategories,
+          name: 'admin-categories',
+          builder: (context, state) => const AdminCategoryManagementScreen(),
+        ),
+
+        // MARK: - Settings Route (General)
+        GoRoute(
+          path: AppConstants.routeSettings,
+          name: 'settings',
+          builder: (context, state) {
+            logRouter('Building SettingsScreen route', tag: 'AppRouter');
+            return const SettingsScreen();
+          },
+        ),
       ],
     );
   }
@@ -147,11 +164,12 @@ class AppRouter {
     final isAccountChoiceRoute = state.matchedLocation == AppConstants.routeAccountChoice;
     final isBookingRoute = state.matchedLocation == AppConstants.routeClientBooking;
     final isConfirmationRoute = state.matchedLocation.startsWith(AppConstants.routeClientConfirmation);
+    final isSettingsRoute = state.matchedLocation == AppConstants.routeSettings;
 
-    logDebug('Route checks - Login: $isLoginRoute, Signup: $isSignupRoute, Splash: $isSplashRoute, Welcome: $isWelcomeRoute, AccountChoice: $isAccountChoiceRoute, Booking: $isBookingRoute, Confirmation: $isConfirmationRoute', tag: 'AppRouter');
+    logDebug('Route checks - Login: $isLoginRoute, Signup: $isSignupRoute, Splash: $isSplashRoute, Welcome: $isWelcomeRoute, AccountChoice: $isAccountChoiceRoute, Booking: $isBookingRoute, Confirmation: $isConfirmationRoute, Settings: $isSettingsRoute', tag: 'AppRouter');
 
     // Allow public routes without authentication
-    if (isSplashRoute || isWelcomeRoute || isAccountChoiceRoute || isLoginRoute || isSignupRoute || isBookingRoute || isConfirmationRoute) {
+    if (isSplashRoute || isWelcomeRoute || isAccountChoiceRoute || isLoginRoute || isSignupRoute || isBookingRoute || isConfirmationRoute || isSettingsRoute) {
       logRouter('Public route - allowing navigation', tag: 'AppRouter');
       return null;
     }

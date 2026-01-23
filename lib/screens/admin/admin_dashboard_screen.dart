@@ -26,6 +26,16 @@ class AdminDashboardScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Admin Dashboard'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              logInfo('Settings button tapped', tag: 'AdminDashboardScreen');
+              context.push(AppConstants.routeSettings);
+            },
+            tooltip: 'Settings',
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -48,6 +58,14 @@ class AdminDashboardScreen extends StatelessWidget {
             subtitle: 'Manage services and pricing',
             icon: Icons.spa,
             route: AppConstants.routeAdminServices,
+          ),
+          
+          _buildNavCard(
+            context,
+            title: 'Categories',
+            subtitle: 'Manage service categories',
+            icon: Icons.category,
+            route: AppConstants.routeAdminCategories,
           ),
           
           _buildNavCard(

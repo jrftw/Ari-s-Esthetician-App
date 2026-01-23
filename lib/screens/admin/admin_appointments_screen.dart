@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/constants/app_constants.dart';
@@ -300,6 +301,15 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
             icon: const Icon(Icons.add),
             onPressed: _showCreateAppointmentDialog,
             tooltip: 'Create New Appointment',
+          ),
+          // Settings Button
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              logInfo('Settings button tapped', tag: 'AdminAppointmentsScreen');
+              context.push(AppConstants.routeSettings);
+            },
+            tooltip: 'Settings',
           ),
         ],
       ),

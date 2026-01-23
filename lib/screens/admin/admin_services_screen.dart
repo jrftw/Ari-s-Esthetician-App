@@ -10,11 +10,13 @@
 // MARK: - Imports
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/logging/app_logger.dart';
 import '../../models/service_model.dart';
+import '../../models/service_category_model.dart';
 import '../../services/firestore_service.dart';
 
 // MARK: - Admin Services Screen
@@ -48,6 +50,16 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
         title: const Text('Services Management'),
         backgroundColor: AppColors.sunflowerYellow,
         foregroundColor: AppColors.darkBrown,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              AppLogger().logInfo('Settings button tapped', tag: 'AdminServicesScreen');
+              context.push(AppConstants.routeSettings);
+            },
+            tooltip: 'Settings',
+          ),
+        ],
       ),
       body: _buildServicesList(),
       floatingActionButton: FloatingActionButton(
@@ -258,6 +270,44 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
                   ),
                 ],
               ),
+              const SizedBox(height: 8),
+              // MARK: - Package Tier Badge
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _getPackageTierColor(service.packageTier).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _getPackageTierColor(service.packageTier).withOpacity(0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.star,
+                          size: 16,
+                          color: _getPackageTierColor(service.packageTier),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${service.packageTier.displayName} Tier',
+                          style: AppTypography.labelSmall.copyWith(
+                            color: _getPackageTierColor(service.packageTier),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
               if (service.bufferTimeBeforeMinutes > 0 ||
                   service.bufferTimeAfterMinutes > 0) ...[
                 const SizedBox(height: 8),
@@ -335,6 +385,20 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
     );
   }
 
+  // MARK: - Package Tier Color Helper
+  /// Returns a color based on the package tier
+  /// Higher tier gets a premium color, mid gets standard, lower gets basic
+  Color _getPackageTierColor(ServicePackageTier tier) {
+    switch (tier) {
+      case ServicePackageTier.higher:
+        return AppColors.sunflowerYellow; // Premium gold/yellow
+      case ServicePackageTier.mid:
+        return AppColors.infoBlue; // Standard blue
+      case ServicePackageTier.lower:
+        return AppColors.textSecondary; // Basic gray
+    }
+  }
+
   // MARK: - Service Form Dialog
   /// Shows dialog for creating or editing a service
   /// Handles form validation and submission
@@ -347,6 +411,9 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
       isEditing ? 'Editing service: ${service.id}' : 'Creating new service',
       tag: 'AdminServicesScreen',
     );
+    
+    // Load business settings to get minimum deposit requirement
+    final businessSettings = await _firestoreService.getBusinessSettings();
 
     // MARK: - Form Controllers
     final nameController = TextEditingController(text: service?.name ?? '');
@@ -375,7 +442,22 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
       text: service?.displayOrder.toString() ?? '0',
     );
 
+    ServicePackageTier selectedPackageTier = service?.packageTier ?? ServicePackageTier.mid;
     bool isActive = service?.isActive ?? true;
+    
+    // MARK: - Category State
+    List<ServiceCategoryModel> availableCategories = [];
+    String? selectedCategoryId = service?.categoryId;
+    bool isLoadingCategories = true;
+    
+    // Load categories
+    try {
+      availableCategories = await _firestoreService.getActiveCategories();
+      isLoadingCategories = false;
+    } catch (e) {
+      AppLogger().logError('Failed to load categories', tag: 'AdminServicesScreen', error: e);
+      isLoadingCategories = false;
+    }
 
     // MARK: - Form Key
     final formKey = GlobalKey<FormState>();
@@ -494,9 +576,13 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
                         return 'Please enter a valid deposit amount';
                       }
                       final depositCents = (deposit * 100).toInt();
-                      if (depositCents < AppConstants.minDepositAmountCents) {
-                        return 'Deposit must be at least \$${(AppConstants.minDepositAmountCents / 100).toStringAsFixed(2)}';
+                      
+                      // Use business settings minimum deposit if set, otherwise allow any amount (including 0)
+                      final minDepositCents = businessSettings?.minDepositAmountCents;
+                      if (minDepositCents != null && depositCents < minDepositCents) {
+                        return 'Deposit must be at least \$${(minDepositCents / 100).toStringAsFixed(2)}';
                       }
+                      
                       if (depositCents > AppConstants.maxDepositAmountCents) {
                         return 'Deposit must be less than \$${(AppConstants.maxDepositAmountCents / 100).toStringAsFixed(2)}';
                       }
@@ -568,6 +654,131 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
                     },
                   ),
                   const SizedBox(height: 16),
+                  // MARK: - Package Tier Selector
+                  DropdownButtonFormField<ServicePackageTier>(
+                    value: selectedPackageTier,
+                    decoration: const InputDecoration(
+                      labelText: 'Package Tier *',
+                      hintText: 'Select package tier',
+                      helperText: 'Categorize service as Higher, Mid, or Lower tier',
+                    ),
+                    items: ServicePackageTier.values.map((tier) {
+                      return DropdownMenuItem<ServicePackageTier>(
+                        value: tier,
+                        child: Text(tier.displayName),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() {
+                          selectedPackageTier = value;
+                        });
+                      }
+                    },
+                    validator: (value) {
+                      if (value == null) {
+                        return 'Package tier is required';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  // MARK: - Category Selector
+                  if (isLoadingCategories)
+                    const CircularProgressIndicator()
+                  else
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        DropdownButtonFormField<String>(
+                          value: selectedCategoryId,
+                          decoration: const InputDecoration(
+                            labelText: 'Category',
+                            hintText: 'Select a category (optional)',
+                            helperText: 'Leave empty for "Other" / Uncategorized',
+                          ),
+                          items: [
+                            // "None (Other)" option
+                            const DropdownMenuItem<String>(
+                              value: null,
+                              child: Text('None (Other)'),
+                            ),
+                            // Category options
+                            ...availableCategories.map((category) {
+                              return DropdownMenuItem<String>(
+                                value: category.id,
+                                child: Text(category.name),
+                              );
+                            }),
+                            // "Create New Category" option
+                            const DropdownMenuItem<String>(
+                              value: '__CREATE_NEW__',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.add, size: 18),
+                                  SizedBox(width: 8),
+                                  Text('Create New Category...'),
+                                ],
+                              ),
+                            ),
+                          ],
+                          onChanged: (value) async {
+                            if (value == '__CREATE_NEW__') {
+                              // Store current selection to restore if dialog is cancelled
+                              final previousSelection = selectedCategoryId;
+                              
+                              // Immediately reset to previous value to prevent showing "__CREATE_NEW__"
+                              setDialogState(() {
+                                selectedCategoryId = previousSelection;
+                              });
+                              
+                              // Show create category dialog
+                              final newCategory = await _showCreateCategoryDialog(context, setDialogState);
+                              if (newCategory != null) {
+                                // Refresh categories list
+                                try {
+                                  final updatedCategories = await _firestoreService.getActiveCategories();
+                                  setDialogState(() {
+                                    availableCategories = updatedCategories;
+                                    selectedCategoryId = newCategory.id;
+                                  });
+                                  AppLogger().logSuccess(
+                                    'Category created and selected: ${newCategory.id}',
+                                    tag: 'AdminServicesScreen',
+                                  );
+                                  
+                                  // Show success message
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Category "${newCategory.name}" created and selected'),
+                                        backgroundColor: AppColors.successGreen,
+                                        duration: const Duration(seconds: 2),
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  AppLogger().logError(
+                                    'Failed to refresh categories after creation',
+                                    tag: 'AdminServicesScreen',
+                                    error: e,
+                                  );
+                                  // Still set the selected category even if refresh failed
+                                  setDialogState(() {
+                                    selectedCategoryId = newCategory.id;
+                                  });
+                                }
+                              }
+                            } else {
+                              setDialogState(() {
+                                selectedCategoryId = value;
+                              });
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  const SizedBox(height: 16),
                   // MARK: - Active Status Toggle
                   SwitchListTile(
                     title: const Text('Active'),
@@ -593,6 +804,16 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
             ElevatedButton(
               onPressed: () async {
                 if (formKey.currentState!.validate()) {
+                  // Get category name snapshot if category is selected
+                  String? categoryNameSnapshot;
+                  if (selectedCategoryId != null && selectedCategoryId!.isNotEmpty) {
+                    final selectedCategory = availableCategories.firstWhere(
+                      (cat) => cat.id == selectedCategoryId,
+                      orElse: () => ServiceCategoryModel.create(name: 'Unknown'),
+                    );
+                    categoryNameSnapshot = selectedCategory.name;
+                  }
+                  
                   await _saveService(
                     context,
                     service: service,
@@ -607,7 +828,10 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
                     bufferTimeAfterMinutes:
                         int.tryParse(bufferAfterController.text) ?? 0,
                     displayOrder: int.tryParse(displayOrderController.text) ?? 0,
+                    packageTier: selectedPackageTier,
                     isActive: isActive,
+                    categoryId: selectedCategoryId,
+                    categoryNameSnapshot: categoryNameSnapshot,
                   );
                 }
               },
@@ -643,7 +867,10 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
     required int bufferTimeBeforeMinutes,
     required int bufferTimeAfterMinutes,
     required int displayOrder,
+    required ServicePackageTier packageTier,
     required bool isActive,
+    String? categoryId,
+    String? categoryNameSnapshot,
   }) async {
     try {
       AppLogger().logLoading(
@@ -662,7 +889,10 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
           bufferTimeBeforeMinutes: bufferTimeBeforeMinutes,
           bufferTimeAfterMinutes: bufferTimeAfterMinutes,
           displayOrder: displayOrder,
+          packageTier: packageTier,
           isActive: isActive,
+          categoryId: categoryId,
+          categoryNameSnapshot: categoryNameSnapshot,
           updatedAt: DateTime.now(),
         );
 
@@ -692,7 +922,10 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
           bufferTimeBeforeMinutes: bufferTimeBeforeMinutes,
           bufferTimeAfterMinutes: bufferTimeAfterMinutes,
           displayOrder: displayOrder,
+          packageTier: packageTier,
           isActive: isActive,
+          categoryId: categoryId,
+          categoryNameSnapshot: categoryNameSnapshot,
         );
 
         await _firestoreService.createService(newService);
@@ -816,6 +1049,154 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
     if (confirmed == true) {
       await _deleteService(service);
     }
+  }
+
+  // MARK: - Create Category Dialog
+  /// Shows a dialog to create a new category
+  /// Returns the created category if successful, null if cancelled
+  Future<ServiceCategoryModel?> _showCreateCategoryDialog(
+    BuildContext context,
+    StateSetter setDialogState,
+  ) async {
+    AppLogger().logUI('Showing create category dialog', tag: 'AdminServicesScreen');
+    
+    final categoryNameController = TextEditingController();
+    final sortOrderController = TextEditingController(text: '0');
+    final categoryFormKey = GlobalKey<FormState>();
+    bool isActive = true;
+    
+    final result = await showDialog<ServiceCategoryModel?>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setCategoryDialogState) => AlertDialog(
+          title: const Text('Create New Category'),
+          content: SingleChildScrollView(
+            child: Form(
+              key: categoryFormKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // MARK: - Category Name
+                  TextFormField(
+                    controller: categoryNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Category Name *',
+                      hintText: 'e.g., Facial Treatments',
+                    ),
+                    autofocus: true,
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Category name is required';
+                      }
+                      if (value.length < AppConstants.minNameLength) {
+                        return 'Name must be at least ${AppConstants.minNameLength} characters';
+                      }
+                      if (value.length > AppConstants.maxNameLength) {
+                        return 'Name must be less than ${AppConstants.maxNameLength} characters';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  // MARK: - Sort Order
+                  TextFormField(
+                    controller: sortOrderController,
+                    decoration: const InputDecoration(
+                      labelText: 'Sort Order',
+                      hintText: '0',
+                      helperText: 'Lower numbers appear first',
+                    ),
+                    keyboardType: TextInputType.number,
+                    validator: (value) {
+                      if (value != null && value.isNotEmpty) {
+                        final order = int.tryParse(value);
+                        if (order == null || order < 0) {
+                          return 'Please enter a valid number';
+                        }
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  // MARK: - Active Status Toggle
+                  SwitchListTile(
+                    title: const Text('Active'),
+                    subtitle: const Text('Category visible in client booking'),
+                    value: isActive,
+                    onChanged: (value) {
+                      setCategoryDialogState(() {
+                        isActive = value;
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            // MARK: - Cancel Button
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(null),
+              child: const Text('Cancel'),
+            ),
+            // MARK: - Create Button
+            ElevatedButton(
+              onPressed: () async {
+                if (categoryFormKey.currentState!.validate()) {
+                  try {
+                    AppLogger().logLoading(
+                      'Creating new category',
+                      tag: 'AdminServicesScreen',
+                    );
+                    
+                    final newCategory = ServiceCategoryModel.create(
+                      name: categoryNameController.text.trim(),
+                      sortOrder: int.tryParse(sortOrderController.text) ?? 0,
+                      isActive: isActive,
+                    );
+                    
+                    final categoryId = await _firestoreService.createCategory(newCategory);
+                    final createdCategory = newCategory.copyWith(id: categoryId);
+                    
+                    AppLogger().logSuccess(
+                      'Category created: $categoryId',
+                      tag: 'AdminServicesScreen',
+                    );
+                    
+                    if (context.mounted) {
+                      Navigator.of(context).pop(createdCategory);
+                    }
+                  } catch (e, stackTrace) {
+                    AppLogger().logError(
+                      'Failed to create category',
+                      tag: 'AdminServicesScreen',
+                      error: e,
+                      stackTrace: stackTrace,
+                    );
+                    
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Error creating category: ${e.toString()}'),
+                          backgroundColor: AppColors.errorRed,
+                        ),
+                      );
+                    }
+                  }
+                }
+              },
+              child: const Text('Create'),
+            ),
+          ],
+        ),
+      ),
+    );
+    
+    categoryNameController.dispose();
+    sortOrderController.dispose();
+    
+    return result;
   }
 
   // MARK: - Delete Service Method

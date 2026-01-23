@@ -79,6 +79,10 @@ If you get an error about Firestore API not enabled:
 - Public read (for booking)
 - Admin write only
 
+### ✅ Service Categories Collection
+- Public read (for booking)
+- Admin write only
+
 ## Verification
 
 After deployment:

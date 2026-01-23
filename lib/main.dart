@@ -16,6 +16,8 @@ import 'core/logging/app_logger.dart';
 import 'core/routing/app_router.dart';
 import 'core/constants/app_colors.dart';
 import 'core/constants/app_typography.dart';
+import 'services/version_check_service.dart';
+import 'screens/update_required_screen.dart';
 
 // MARK: - Main Function
 /// Application entry point
@@ -101,7 +103,8 @@ void main() async {
 // MARK: - Main App Widget
 /// Root application widget
 /// Configures theme, routing, and global app settings
-class ArisEstheticianApp extends StatelessWidget {
+/// Checks app version before allowing app usage
+class ArisEstheticianApp extends StatefulWidget {
   final bool firebaseInitialized;
   final String? firebaseError;
 
@@ -112,16 +115,87 @@ class ArisEstheticianApp extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  State<ArisEstheticianApp> createState() => _ArisEstheticianAppState();
+}
+
+// MARK: - Main App Widget State
+/// State for main app widget with version checking
+class _ArisEstheticianAppState extends State<ArisEstheticianApp> {
+  VersionCheckResult? _versionCheckResult;
+  bool _versionCheckComplete = false;
+  final VersionCheckService _versionCheckService = VersionCheckService();
+
+  @override
+  void initState() {
+    super.initState();
     print('🔍 Building ArisEstheticianApp widget...');
-    print('🔍 Firebase initialized: $firebaseInitialized');
+    print('🔍 Firebase initialized: ${widget.firebaseInitialized}');
     
     logUI('Building ArisEstheticianApp widget', tag: 'ArisEstheticianApp');
-    logDebug('Firebase initialized: $firebaseInitialized', tag: 'ArisEstheticianApp');
+    logDebug('Firebase initialized: ${widget.firebaseInitialized}', tag: 'ArisEstheticianApp');
     
+    // MARK: - Version Check
+    /// Check app version if Firebase is initialized
+    /// Skip check if Firebase failed (will show error screen)
+    if (widget.firebaseInitialized) {
+      _checkVersion();
+    } else {
+      // If Firebase not initialized, skip version check
+      _versionCheckComplete = true;
+    }
+  }
+
+  // MARK: - Version Check Method
+  /// Check app version against latest required version
+  Future<void> _checkVersion() async {
+    try {
+      logInfo('Starting version check', tag: 'ArisEstheticianApp');
+      print('🔍 Checking app version...');
+      
+      final result = await _versionCheckService.checkVersion();
+      
+      if (mounted) {
+        setState(() {
+          _versionCheckResult = result;
+          _versionCheckComplete = true;
+        });
+        
+        if (result.updateRequired) {
+          logWarning('Update required: ${result.currentVersion} (Build ${result.currentBuildNumber}) < ${result.latestVersion} (Build ${result.latestBuildNumber})', tag: 'ArisEstheticianApp');
+          print('🔍 Update required - showing update screen');
+        } else {
+          logInfo('App version is up to date', tag: 'ArisEstheticianApp');
+          print('🔍 App version is up to date ✅');
+        }
+      }
+    } catch (e, stackTrace) {
+      logError(
+        'Version check failed',
+        tag: 'ArisEstheticianApp',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      print('🔍 Version check failed - allowing app to continue');
+      // On error, allow app to continue (fail open)
+      if (mounted) {
+        setState(() {
+          _versionCheckResult = VersionCheckResult(
+            updateRequired: false,
+            currentVersion: '1.0.0',
+            currentBuildNumber: 1,
+            error: e.toString(),
+          );
+          _versionCheckComplete = true;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     // MARK: - Firebase Error Screen
     /// Show error screen if Firebase failed to initialize
-    if (!firebaseInitialized) {
+    if (!widget.firebaseInitialized) {
       print('🔍 Firebase not initialized - showing error screen');
       logWarning('Firebase not initialized - showing error screen', tag: 'ArisEstheticianApp');
       logUI('Creating MaterialApp with error screen', tag: 'ArisEstheticianApp');
@@ -129,10 +203,62 @@ class ArisEstheticianApp extends StatelessWidget {
         title: 'Ari\'s Esthetician App',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
-        home: _FirebaseErrorScreen(error: firebaseError),
+        home: _FirebaseErrorScreen(error: widget.firebaseError),
       );
     }
 
+    // MARK: - Version Check Loading
+    /// Show loading while checking version
+    if (!_versionCheckComplete) {
+      logUI('Version check in progress - showing loading', tag: 'ArisEstheticianApp');
+      return MaterialApp(
+        title: 'Ari\'s Esthetician App',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          backgroundColor: AppColors.backgroundCream,
+          body: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(
+                  color: AppColors.sunflowerYellow,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Checking for updates...',
+                  style: AppTypography.bodyMedium.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // MARK: - Update Required Screen
+    /// Show update screen if update is required
+    if (_versionCheckResult?.updateRequired == true) {
+      logUI('Update required - showing UpdateRequiredScreen', tag: 'ArisEstheticianApp');
+      return MaterialApp(
+        title: 'Ari\'s Esthetician App',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.lightTheme,
+        home: UpdateRequiredScreen(
+          currentVersion: _versionCheckResult!.currentVersion,
+          currentBuildNumber: _versionCheckResult!.currentBuildNumber,
+          latestVersion: _versionCheckResult!.latestVersion ?? '1.0.0',
+          latestBuildNumber: _versionCheckResult!.latestBuildNumber ?? 1,
+          updateMessage: _versionCheckResult!.updateMessage,
+          updateUrl: _versionCheckResult!.updateUrl,
+        ),
+      );
+    }
+
+    // MARK: - Normal App
+    /// Show normal app if version is up to date
     print('🔍 Creating AppRouter instance...');
     logRouter('Creating AppRouter instance', tag: 'ArisEstheticianApp');
     try {

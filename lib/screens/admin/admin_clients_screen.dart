@@ -11,6 +11,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/constants/app_constants.dart';
@@ -71,6 +72,16 @@ class _AdminClientsScreenState extends State<AdminClientsScreen> {
         title: const Text('Client Directory'),
         backgroundColor: AppColors.sunflowerYellow,
         foregroundColor: AppColors.darkBrown,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              AppLogger().logInfo('Settings button tapped', tag: 'AdminClientsScreen');
+              context.push(AppConstants.routeSettings);
+            },
+            tooltip: 'Settings',
+          ),
+        ],
       ),
       body: Column(
         children: [

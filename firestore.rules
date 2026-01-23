@@ -84,5 +84,21 @@ service cloud.firestore {
       allow read: if true; // Public read for booking
       allow write: if isAdmin();
     }
+    
+    // MARK: - App Version Collection
+    /// App version - public read, admin write
+    /// Used for version forcing and update checks
+    match /app_version/{versionId} {
+      allow read: if true; // Public read for version checking
+      allow write: if isAdmin();
+    }
+    
+    // MARK: - Service Categories Collection
+    /// Service categories - public read, admin write
+    /// Categories are used to organize services and should be visible to clients for booking
+    match /serviceCategories/{categoryId} {
+      allow read: if true; // Public read for booking
+      allow create, update, delete: if isAdmin();
+    }
   }
 }

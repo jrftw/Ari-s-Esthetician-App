@@ -282,7 +282,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        'Version ${AppVersion.versionStringShort}',
+                        'Version ${AppVersion.versionString}',
                         style: AppTypography.bodySmall.copyWith(
                           color: AppColors.textSecondary,
                         ),
