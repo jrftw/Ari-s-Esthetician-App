@@ -14,6 +14,10 @@ import '../core/logging/app_logger.dart';
 // MARK: - Preferences Service
 /// Service for managing local user preferences
 /// Handles storage and retrieval of user settings like login preferences
+/// 
+/// Note: SharedPreferences persists across app updates and versions.
+/// The "keep_signed_in" preference will persist even when the app is updated,
+/// ensuring users remain signed in across new app versions.
 class PreferencesService {
   static const String _keyRememberMe = 'remember_me';
   static const String _keyKeepSignedIn = 'keep_signed_in';

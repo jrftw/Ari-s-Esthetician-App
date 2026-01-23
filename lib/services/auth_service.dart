@@ -2,16 +2,19 @@
  * Filename: auth_service.dart
  * Purpose: Firebase Authentication service for user login and role management
  * Author: Kevin Doyle Jr. / Infinitum Imagery LLC
- * Last Modified: 2024-01-XX
- * Dependencies: firebase_auth, cloud_firestore
+ * Last Modified: 2026-01-22
+ * Dependencies: firebase_auth, cloud_firestore, shared_preferences
  * Platform Compatibility: iOS, Android, Web
  */
 
 // MARK: - Imports
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
 import '../core/logging/app_logger.dart';
 import '../core/constants/app_constants.dart';
+import 'preferences_service.dart';
+import '../models/client_model.dart';
 
 // MARK: - User Role Enum
 /// User roles in the application
@@ -75,6 +78,7 @@ class AuthService {
 
   /// Sign up with email and password
   /// Creates a new user account and sets default role to 'client'
+  /// Also creates a client record in the clients collection
   Future<User?> signUpWithEmailAndPassword({
     required String email,
     required String password,
@@ -96,6 +100,45 @@ class AuthService {
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
+
+        // Create client record if user is a client
+        if (role == UserRole.client) {
+          try {
+            // Check if client already exists by email
+            final existingClient = await _firestore
+                .collection(AppConstants.firestoreClientsCollection)
+                .where('email', isEqualTo: email)
+                .limit(1)
+                .get();
+
+            if (existingClient.docs.isEmpty) {
+              // Create new client record with email only
+              // Name and phone will be added when they book their first appointment
+              final client = ClientModel.create(
+                firstName: '', // Will be updated on first booking
+                lastName: '', // Will be updated on first booking
+                email: email,
+                phone: '', // Will be updated on first booking
+              );
+
+              await _firestore
+                  .collection(AppConstants.firestoreClientsCollection)
+                  .add(client.toFirestore());
+
+              AppLogger().logInfo('Client record created for: $email', tag: 'AuthService');
+            } else {
+              AppLogger().logInfo('Client record already exists for: $email', tag: 'AuthService');
+            }
+          } catch (e, stackTrace) {
+            // Log error but don't fail signup if client creation fails
+            AppLogger().logError(
+              'Failed to create client record during signup',
+              tag: 'AuthService',
+              error: e,
+              stackTrace: stackTrace,
+            );
+          }
+        }
       }
 
       AppLogger().logInfo('Sign up successful: ${userCredential.user?.email}', tag: 'AuthService');
@@ -113,10 +156,21 @@ class AuthService {
 
   /// Sign out current user
   /// Clears the Firebase Auth session
-  Future<void> signOut() async {
+  /// If [clearKeepSignedIn] is true, also clears the "keep signed in" preference
+  Future<void> signOut({bool clearKeepSignedIn = true}) async {
     try {
-      AppLogger().logInfo('Signing out user', tag: 'AuthService');
+      AppLogger().logInfo('Signing out user (clearKeepSignedIn: $clearKeepSignedIn)', tag: 'AuthService');
+      
+      // Sign out from Firebase Auth
       await _auth.signOut();
+      
+      // Clear keep signed in preference if requested
+      if (clearKeepSignedIn) {
+        final preferencesService = PreferencesService.instance;
+        await preferencesService.setKeepSignedIn(false);
+        AppLogger().logInfo('Keep signed in preference cleared', tag: 'AuthService');
+      }
+      
       AppLogger().logInfo('Sign out successful', tag: 'AuthService');
     } catch (e, stackTrace) {
       AppLogger().logError(
@@ -136,6 +190,90 @@ class AuthService {
     // Firebase Auth persists sessions by default
     // This method returns true if there's a current user
     return _auth.currentUser != null;
+  }
+
+  /// Wait for auth state to be restored
+  /// Important for web/simulator where Firebase Auth needs time to restore session from IndexedDB
+  /// Returns the current user after waiting for auth state restoration
+  Future<User?> waitForAuthStateRestoration({Duration timeout = const Duration(seconds: 3)}) async {
+    try {
+      AppLogger().logInfo('Waiting for auth state restoration', tag: 'AuthService');
+      
+      // If user already exists, return immediately
+      if (_auth.currentUser != null) {
+        AppLogger().logInfo('User already authenticated: ${_auth.currentUser?.email}', tag: 'AuthService');
+        return _auth.currentUser;
+      }
+
+      // Wait for auth state changes stream to emit initial value
+      final completer = Completer<User?>();
+      StreamSubscription<User?>? subscription;
+      Timer? timeoutTimer;
+
+      subscription = _auth.authStateChanges().listen((user) {
+        if (!completer.isCompleted) {
+          AppLogger().logInfo('Auth state restored: ${user?.email ?? "null"}', tag: 'AuthService');
+          completer.complete(user);
+          subscription?.cancel();
+          timeoutTimer?.cancel();
+        }
+      });
+
+      // Set timeout
+      timeoutTimer = Timer(timeout, () {
+        if (!completer.isCompleted) {
+          AppLogger().logWarning('Auth state restoration timeout', tag: 'AuthService');
+          completer.complete(_auth.currentUser);
+          subscription?.cancel();
+        }
+      });
+
+      final user = await completer.future;
+      return user;
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to wait for auth state restoration',
+        tag: 'AuthService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      return _auth.currentUser;
+    }
+  }
+
+  /// Restore session if "keep signed in" is enabled
+  /// Checks preferences and waits for Firebase Auth to restore session
+  Future<User?> restoreSessionIfEnabled() async {
+    try {
+      final preferencesService = PreferencesService.instance;
+      final keepSignedIn = await preferencesService.getKeepSignedIn();
+      
+      if (!keepSignedIn) {
+        AppLogger().logInfo('Keep signed in is disabled - skipping session restoration', tag: 'AuthService');
+        return null;
+      }
+
+      AppLogger().logInfo('Keep signed in is enabled - waiting for session restoration', tag: 'AuthService');
+      
+      // Wait for auth state to be restored
+      final user = await waitForAuthStateRestoration();
+      
+      if (user != null) {
+        AppLogger().logInfo('Session restored successfully: ${user.email}', tag: 'AuthService');
+      } else {
+        AppLogger().logInfo('No session to restore', tag: 'AuthService');
+      }
+      
+      return user;
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to restore session',
+        tag: 'AuthService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      return null;
+    }
   }
 
   /// Get user role from Firestore

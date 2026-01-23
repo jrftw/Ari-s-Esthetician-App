@@ -62,3 +62,8 @@ firebase.json
 
 # Stripe
 stripe_keys.json
+
+# Firebase Functions
+functions/node_modules/
+functions/.runtimeconfig.json
+functions/.env

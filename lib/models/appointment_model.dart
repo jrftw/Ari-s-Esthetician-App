@@ -42,6 +42,7 @@ class AppointmentModel extends Equatable {
   final String serviceId;
   
   /// Service snapshot at time of booking (for historical accuracy)
+  @JsonKey(fromJson: _serviceModelFromJson, toJson: _serviceModelToJson)
   final ServiceModel? serviceSnapshot;
   
   /// Client first name
@@ -73,8 +74,20 @@ class AppointmentModel extends Equatable {
   /// Deposit amount paid in cents
   final int depositAmountCents;
   
-  /// Stripe payment intent ID
+  /// Stripe payment intent ID for deposit
   final String? stripePaymentIntentId;
+  
+  /// Tip amount paid during booking (in cents)
+  final int tipAmountCents;
+  
+  /// Stripe payment intent ID for tip (if paid separately from deposit)
+  final String? tipPaymentIntentId;
+  
+  /// Post-appointment tip amount (in cents) - added after appointment completion
+  final int? postAppointmentTipAmountCents;
+  
+  /// Stripe payment intent ID for post-appointment tip
+  final String? postAppointmentTipPaymentIntentId;
   
   /// Whether deposit has been forfeited (no-show)
   final bool depositForfeited;
@@ -123,6 +136,10 @@ class AppointmentModel extends Equatable {
     this.status = AppointmentStatus.confirmed,
     required this.depositAmountCents,
     this.stripePaymentIntentId,
+    this.tipAmountCents = 0,
+    this.tipPaymentIntentId,
+    this.postAppointmentTipAmountCents,
+    this.postAppointmentTipPaymentIntentId,
     this.depositForfeited = false,
     this.calendarSynced = false,
     this.googleCalendarEventId,
@@ -161,6 +178,8 @@ class AppointmentModel extends Equatable {
     required int durationMinutes,
     required int depositAmountCents,
     String? stripePaymentIntentId,
+    int tipAmountCents = 0,
+    String? tipPaymentIntentId,
   }) {
     final now = DateTime.now();
     final endTime = startTime.add(Duration(minutes: durationMinutes));
@@ -179,6 +198,8 @@ class AppointmentModel extends Equatable {
       status: AppointmentStatus.confirmed,
       depositAmountCents: depositAmountCents,
       stripePaymentIntentId: stripePaymentIntentId,
+      tipAmountCents: tipAmountCents,
+      tipPaymentIntentId: tipPaymentIntentId,
       depositForfeited: false,
       calendarSynced: false,
       createdAt: now,
@@ -206,6 +227,29 @@ class AppointmentModel extends Equatable {
   /// Get formatted deposit as string
   String get formattedDeposit {
     return '\$${(depositAmountCents / 100).toStringAsFixed(2)}';
+  }
+
+  /// Get total tip amount (pre + post appointment) in cents
+  int get totalTipAmountCents {
+    return tipAmountCents + (postAppointmentTipAmountCents ?? 0);
+  }
+
+  /// Get formatted total tip as string
+  String get formattedTotalTip {
+    return '\$${(totalTipAmountCents / 100).toStringAsFixed(2)}';
+  }
+
+  /// Get formatted pre-appointment tip as string
+  String get formattedPreTip {
+    return '\$${(tipAmountCents / 100).toStringAsFixed(2)}';
+  }
+
+  /// Get formatted post-appointment tip as string
+  String get formattedPostTip {
+    if (postAppointmentTipAmountCents == null || postAppointmentTipAmountCents == 0) {
+      return '\$0.00';
+    }
+    return '\$${(postAppointmentTipAmountCents! / 100).toStringAsFixed(2)}';
   }
 
   /// Check if appointment is in the past
@@ -248,6 +292,10 @@ class AppointmentModel extends Equatable {
     AppointmentStatus? status,
     int? depositAmountCents,
     String? stripePaymentIntentId,
+    int? tipAmountCents,
+    String? tipPaymentIntentId,
+    int? postAppointmentTipAmountCents,
+    String? postAppointmentTipPaymentIntentId,
     bool? depositForfeited,
     bool? calendarSynced,
     String? googleCalendarEventId,
@@ -272,6 +320,10 @@ class AppointmentModel extends Equatable {
       status: status ?? this.status,
       depositAmountCents: depositAmountCents ?? this.depositAmountCents,
       stripePaymentIntentId: stripePaymentIntentId ?? this.stripePaymentIntentId,
+      tipAmountCents: tipAmountCents ?? this.tipAmountCents,
+      tipPaymentIntentId: tipPaymentIntentId ?? this.tipPaymentIntentId,
+      postAppointmentTipAmountCents: postAppointmentTipAmountCents ?? this.postAppointmentTipAmountCents,
+      postAppointmentTipPaymentIntentId: postAppointmentTipPaymentIntentId ?? this.postAppointmentTipPaymentIntentId,
       depositForfeited: depositForfeited ?? this.depositForfeited,
       calendarSynced: calendarSynced ?? this.calendarSynced,
       googleCalendarEventId: googleCalendarEventId ?? this.googleCalendarEventId,
@@ -300,6 +352,10 @@ class AppointmentModel extends Equatable {
         status,
         depositAmountCents,
         stripePaymentIntentId,
+        tipAmountCents,
+        tipPaymentIntentId,
+        postAppointmentTipAmountCents,
+        postAppointmentTipPaymentIntentId,
         depositForfeited,
         calendarSynced,
         googleCalendarEventId,
@@ -327,6 +383,22 @@ class AppointmentModel extends Equatable {
   static dynamic _timestampToJson(DateTime? dateTime) {
     if (dateTime == null) return null;
     return Timestamp.fromDate(dateTime);
+  }
+
+  // MARK: - Service Model Helpers
+  /// Convert ServiceModel from JSON Map
+  static ServiceModel? _serviceModelFromJson(dynamic json) {
+    if (json == null) return null;
+    if (json is Map<String, dynamic>) {
+      return ServiceModel.fromJson(json);
+    }
+    return null;
+  }
+
+  /// Convert ServiceModel to JSON Map
+  static dynamic _serviceModelToJson(ServiceModel? serviceModel) {
+    if (serviceModel == null) return null;
+    return serviceModel.toJson();
   }
 }
 

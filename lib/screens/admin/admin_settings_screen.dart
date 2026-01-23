@@ -42,6 +42,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   bool _isLoading = true;
   bool _isSaving = false;
   bool _isSuperAdmin = false;
+  bool _paymentsEnabled = false;
 
   // MARK: - Form Controllers
   final TextEditingController _businessNameController = TextEditingController();
@@ -182,6 +183,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     _cancellationFeeController.text = settings.cancellationFeeCents != null
         ? (settings.cancellationFeeCents! / 100).toStringAsFixed(2)
         : '';
+    _paymentsEnabled = settings.paymentsEnabled;
   }
 
   // MARK: - Save Functionality
@@ -298,6 +300,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       cancellationFeeCents: _cancellationFeeController.text.trim().isEmpty
           ? null
           : ((double.tryParse(_cancellationFeeController.text.trim()) ?? 0.0) * 100).toInt(),
+      paymentsEnabled: _paymentsEnabled,
       createdAt: _settings?.createdAt ?? now,
       updatedAt: now,
     );
@@ -594,11 +597,47 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                 title: 'Payment Integration (Super Admin Only)',
                 icon: Icons.payment,
               ),
+              // Payment Enable/Disable Toggle
+              SwitchListTile(
+                title: Text(
+                  'Enable Payments',
+                  style: AppTypography.bodyLarge.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                subtitle: Text(
+                  _paymentsEnabled
+                      ? 'Payments are enabled. Clients will be required to pay during booking.'
+                      : 'Payments are disabled. Clients can book without payment. Pricing will still be shown.',
+                  style: AppTypography.bodySmall.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                value: _paymentsEnabled,
+                onChanged: (value) {
+                  setState(() {
+                    _paymentsEnabled = value;
+                  });
+                },
+                activeColor: AppColors.sunflowerYellow,
+                secondary: Icon(
+                  _paymentsEnabled ? Icons.payment : Icons.payment_outlined,
+                  color: _paymentsEnabled ? AppColors.sunflowerYellow : AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 16),
               _buildTextField(
                 controller: _stripePublishableKeyController,
                 label: 'Stripe Publishable Key (Optional)',
                 icon: Icons.vpn_key,
                 hint: 'pk_test_...',
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Required if payments are enabled',
+                style: AppTypography.bodySmall.copyWith(
+                  color: AppColors.textSecondary,
+                ),
               ),
               const SizedBox(height: 16),
               _buildTextField(
@@ -607,6 +646,13 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                 icon: Icons.lock,
                 hint: 'sk_test_...',
                 obscureText: true,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Required if payments are enabled. Store securely in Cloud Functions.',
+                style: AppTypography.bodySmall.copyWith(
+                  color: AppColors.textSecondary,
+                ),
               ),
               const SizedBox(height: 32),
             ],

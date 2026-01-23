@@ -19,6 +19,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/logging/app_logger.dart';
 import '../../models/appointment_model.dart';
 import '../../models/service_model.dart';
+import '../../models/client_model.dart';
 import '../../services/firestore_service.dart';
 
 // MARK: - View Mode Enum
@@ -1020,19 +1021,665 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
 
   /// Show create appointment dialog
   Future<void> _showCreateAppointmentDialog() async {
-    // TODO: Implement manual appointment creation
-    // This would require a form with:
-    // - Service selection
-    // - Client information (or select existing client)
-    // - Date/time picker
-    // - Notes
-    // For now, show a placeholder
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Manual appointment creation coming soon'),
-        duration: Duration(seconds: 2),
+    logUI('Showing create appointment dialog', tag: 'AdminAppointmentsScreen');
+    
+    // Load services and clients for selection
+    List<ServiceModel> services = [];
+    List<ClientModel> clients = [];
+    bool isLoadingData = true;
+    
+    try {
+      services = await _firestoreService.getActiveServices();
+      clients = await _firestoreService.getAllClients();
+      isLoadingData = false;
+    } catch (e, stackTrace) {
+      logError(
+        'Failed to load services/clients for appointment creation',
+        tag: 'AdminAppointmentsScreen',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load data: ${e.toString()}'),
+            backgroundColor: AppColors.errorRed,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Form controllers
+    final formKey = GlobalKey<FormState>();
+    ServiceModel? selectedService;
+    ClientModel? selectedClient;
+    DateTime? selectedDate;
+    TimeOfDay? selectedTime;
+    final clientFirstNameController = TextEditingController();
+    final clientLastNameController = TextEditingController();
+    final clientEmailController = TextEditingController();
+    final clientPhoneController = TextEditingController();
+    final intakeNotesController = TextEditingController();
+    final adminNotesController = TextEditingController();
+    final depositAmountController = TextEditingController(text: '0');
+    AppointmentStatus selectedStatus = AppointmentStatus.confirmed;
+    bool useExistingClient = false;
+    bool isCreating = false;
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => Dialog(
+          child: Container(
+            width: MediaQuery.of(context).size.width * 0.9,
+            constraints: const BoxConstraints(maxWidth: 600, maxHeight: 800),
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Header
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.sunflowerYellow,
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(AppConstants.defaultBorderRadius),
+                        topRight: Radius.circular(AppConstants.defaultBorderRadius),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Create New Appointment',
+                            style: AppTypography.titleLarge.copyWith(
+                              color: AppColors.darkBrown,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: isCreating ? null : () => Navigator.of(context).pop(),
+                          color: AppColors.darkBrown,
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  // Form Content
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: isLoadingData
+                          ? const Center(child: CircularProgressIndicator())
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Service Selection
+                                Text(
+                                  'Service *',
+                                  style: AppTypography.titleSmall.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.darkBrown,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                DropdownButtonFormField<ServiceModel>(
+                                  value: selectedService,
+                                  decoration: InputDecoration(
+                                    hintText: 'Select a service',
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+                                    ),
+                                  ),
+                                  items: services.map((service) {
+                                    return DropdownMenuItem<ServiceModel>(
+                                      value: service,
+                                      child: Text('${service.name} (${service.formattedPrice})'),
+                                    );
+                                  }).toList(),
+                                  onChanged: (value) {
+                                    setDialogState(() {
+                                      selectedService = value;
+                                      // Auto-fill deposit amount
+                                      if (value != null) {
+                                        depositAmountController.text = (value.depositAmountCents / 100).toStringAsFixed(2);
+                                      }
+                                    });
+                                  },
+                                  validator: (value) {
+                                    if (value == null) {
+                                      return 'Please select a service';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 24),
+                                
+                                // Client Selection Toggle
+                                Row(
+                                  children: [
+                                    Checkbox(
+                                      value: useExistingClient,
+                                      onChanged: (value) {
+                                        setDialogState(() {
+                                          useExistingClient = value ?? false;
+                                          if (useExistingClient) {
+                                            selectedClient = null;
+                                          } else {
+                                            clientFirstNameController.clear();
+                                            clientLastNameController.clear();
+                                            clientEmailController.clear();
+                                            clientPhoneController.clear();
+                                          }
+                                        });
+                                      },
+                                    ),
+                                    Text(
+                                      'Use existing client',
+                                      style: AppTypography.bodyMedium,
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                
+                                // Existing Client Selection
+                                if (useExistingClient) ...[
+                                  Text(
+                                    'Select Client *',
+                                    style: AppTypography.titleSmall.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.darkBrown,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  DropdownButtonFormField<ClientModel>(
+                                    value: selectedClient,
+                                    decoration: InputDecoration(
+                                      hintText: 'Search and select client',
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+                                      ),
+                                    ),
+                                    items: clients.map((client) {
+                                      return DropdownMenuItem<ClientModel>(
+                                        value: client,
+                                        child: Text('${client.fullName} (${client.email})'),
+                                      );
+                                    }).toList(),
+                                    onChanged: (value) {
+                                      setDialogState(() {
+                                        selectedClient = value;
+                                        if (value != null) {
+                                          clientFirstNameController.text = value.firstName;
+                                          clientLastNameController.text = value.lastName;
+                                          clientEmailController.text = value.email;
+                                          clientPhoneController.text = value.phone;
+                                        }
+                                      });
+                                    },
+                                    validator: (value) {
+                                      if (useExistingClient && value == null) {
+                                        return 'Please select a client';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  const SizedBox(height: 24),
+                                ],
+                                
+                                // Client Information Fields
+                                Text(
+                                  'Client Information *',
+                                  style: AppTypography.titleSmall.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.darkBrown,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextFormField(
+                                        controller: clientFirstNameController,
+                                        decoration: InputDecoration(
+                                          labelText: 'First Name',
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+                                          ),
+                                        ),
+                                        enabled: !useExistingClient || selectedClient == null,
+                                        validator: (value) {
+                                          if (value == null || value.trim().isEmpty) {
+                                            return 'First name is required';
+                                          }
+                                          if (value.length < AppConstants.minNameLength) {
+                                            return 'First name must be at least ${AppConstants.minNameLength} characters';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: TextFormField(
+                                        controller: clientLastNameController,
+                                        decoration: InputDecoration(
+                                          labelText: 'Last Name',
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+                                          ),
+                                        ),
+                                        enabled: !useExistingClient || selectedClient == null,
+                                        validator: (value) {
+                                          if (value == null || value.trim().isEmpty) {
+                                            return 'Last name is required';
+                                          }
+                                          if (value.length < AppConstants.minNameLength) {
+                                            return 'Last name must be at least ${AppConstants.minNameLength} characters';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                TextFormField(
+                                  controller: clientEmailController,
+                                  decoration: InputDecoration(
+                                    labelText: 'Email *',
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+                                    ),
+                                  ),
+                                  keyboardType: TextInputType.emailAddress,
+                                  enabled: !useExistingClient || selectedClient == null,
+                                  validator: (value) {
+                                    if (value == null || value.trim().isEmpty) {
+                                      return 'Email is required';
+                                    }
+                                    if (!value.contains('@')) {
+                                      return 'Please enter a valid email';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+                                TextFormField(
+                                  controller: clientPhoneController,
+                                  decoration: InputDecoration(
+                                    labelText: 'Phone *',
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+                                    ),
+                                  ),
+                                  keyboardType: TextInputType.phone,
+                                  enabled: !useExistingClient || selectedClient == null,
+                                  validator: (value) {
+                                    if (value == null || value.trim().isEmpty) {
+                                      return 'Phone is required';
+                                    }
+                                    if (value.length < AppConstants.minPhoneLength) {
+                                      return 'Phone must be at least ${AppConstants.minPhoneLength} digits';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 24),
+                                
+                                // Date and Time Selection
+                                Text(
+                                  'Appointment Date & Time *',
+                                  style: AppTypography.titleSmall.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.darkBrown,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        icon: const Icon(Icons.calendar_today),
+                                        label: Text(
+                                          selectedDate != null
+                                              ? DateFormat('MMM d, yyyy').format(selectedDate!)
+                                              : 'Select Date',
+                                        ),
+                                        onPressed: () async {
+                                          final date = await showDatePicker(
+                                            context: context,
+                                            initialDate: selectedDate ?? DateTime.now(),
+                                            firstDate: DateTime.now().subtract(const Duration(days: 30)),
+                                            lastDate: DateTime.now().add(const Duration(days: 365)),
+                                          );
+                                          if (date != null) {
+                                            setDialogState(() {
+                                              selectedDate = date;
+                                            });
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        icon: const Icon(Icons.access_time),
+                                        label: Text(
+                                          selectedTime != null
+                                              ? selectedTime!.format(context)
+                                              : 'Select Time',
+                                        ),
+                                        onPressed: () async {
+                                          final time = await showTimePicker(
+                                            context: context,
+                                            initialTime: selectedTime ?? TimeOfDay.now(),
+                                          );
+                                          if (time != null) {
+                                            setDialogState(() {
+                                              selectedTime = time;
+                                            });
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (selectedDate == null || selectedTime == null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    child: Text(
+                                      'Please select both date and time',
+                                      style: AppTypography.bodySmall.copyWith(
+                                        color: AppColors.errorRed,
+                                      ),
+                                    ),
+                                  ),
+                                const SizedBox(height: 24),
+                                
+                                // Deposit Amount
+                                Text(
+                                  'Deposit Amount',
+                                  style: AppTypography.titleSmall.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.darkBrown,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                TextFormField(
+                                  controller: depositAmountController,
+                                  decoration: InputDecoration(
+                                    labelText: 'Deposit (\$)',
+                                    prefixText: '\$',
+                                    hintText: '0.00',
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+                                    ),
+                                  ),
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  validator: (value) {
+                                    if (value == null || value.trim().isEmpty) {
+                                      return 'Deposit amount is required (use 0 for no deposit)';
+                                    }
+                                    final amount = double.tryParse(value);
+                                    if (amount == null) {
+                                      return 'Please enter a valid number';
+                                    }
+                                    if (amount < 0) {
+                                      return 'Deposit cannot be negative';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 24),
+                                
+                                // Status Selection
+                                Text(
+                                  'Status *',
+                                  style: AppTypography.titleSmall.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.darkBrown,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                DropdownButtonFormField<AppointmentStatus>(
+                                  value: selectedStatus,
+                                  decoration: InputDecoration(
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+                                    ),
+                                  ),
+                                  items: AppointmentStatus.values.map((status) {
+                                    return DropdownMenuItem<AppointmentStatus>(
+                                      value: status,
+                                      child: Text(_formatStatus(status)),
+                                    );
+                                  }).toList(),
+                                  onChanged: (value) {
+                                    if (value != null) {
+                                      setDialogState(() {
+                                        selectedStatus = value;
+                                      });
+                                    }
+                                  },
+                                ),
+                                const SizedBox(height: 24),
+                                
+                                // Client Notes
+                                Text(
+                                  'Client Notes (Optional)',
+                                  style: AppTypography.titleSmall.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.darkBrown,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                TextFormField(
+                                  controller: intakeNotesController,
+                                  decoration: InputDecoration(
+                                    labelText: 'Intake notes from client',
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+                                    ),
+                                  ),
+                                  maxLines: 3,
+                                  maxLength: AppConstants.maxNotesLength,
+                                ),
+                                const SizedBox(height: 24),
+                                
+                                // Admin Notes
+                                Text(
+                                  'Admin Notes (Optional)',
+                                  style: AppTypography.titleSmall.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.darkBrown,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                TextFormField(
+                                  controller: adminNotesController,
+                                  decoration: InputDecoration(
+                                    labelText: 'Internal admin notes',
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+                                    ),
+                                  ),
+                                  maxLines: 3,
+                                  maxLength: AppConstants.maxNotesLength,
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+                  
+                  // Action Buttons
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.softCream,
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(AppConstants.defaultBorderRadius),
+                        bottomRight: Radius.circular(AppConstants.defaultBorderRadius),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: isCreating
+                              ? null
+                              : () {
+                                  Navigator.of(context).pop();
+                                },
+                          child: const Text('Cancel'),
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton(
+                          onPressed: isCreating
+                              ? null
+                              : () async {
+                                  if (!formKey.currentState!.validate()) {
+                                    return;
+                                  }
+                                  
+                                  if (selectedService == null) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Please select a service'),
+                                        backgroundColor: AppColors.errorRed,
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  
+                                  if (selectedDate == null || selectedTime == null) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Please select both date and time'),
+                                        backgroundColor: AppColors.errorRed,
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  
+                                  setDialogState(() {
+                                    isCreating = true;
+                                  });
+                                  
+                                  try {
+                                    // Combine date and time
+                                    final appointmentDateTime = DateTime(
+                                      selectedDate!.year,
+                                      selectedDate!.month,
+                                      selectedDate!.day,
+                                      selectedTime!.hour,
+                                      selectedTime!.minute,
+                                    );
+                                    
+                                    // Calculate end time
+                                    final endTime = appointmentDateTime.add(
+                                      Duration(minutes: selectedService!.durationMinutes),
+                                    );
+                                    
+                                    // Parse deposit amount
+                                    final depositAmount = (double.parse(depositAmountController.text) * 100).round();
+                                    
+                                    // Create appointment
+                                    final now = DateTime.now();
+                                    final appointment = AppointmentModel(
+                                      id: '', // Will be set by Firestore
+                                      serviceId: selectedService!.id,
+                                      serviceSnapshot: selectedService,
+                                      clientFirstName: clientFirstNameController.text.trim(),
+                                      clientLastName: clientLastNameController.text.trim(),
+                                      clientEmail: clientEmailController.text.trim(),
+                                      clientPhone: clientPhoneController.text.trim(),
+                                      intakeNotes: intakeNotesController.text.trim().isEmpty
+                                          ? null
+                                          : intakeNotesController.text.trim(),
+                                      startTime: appointmentDateTime,
+                                      endTime: endTime,
+                                      status: selectedStatus,
+                                      depositAmountCents: depositAmount,
+                                      createdAt: now,
+                                      updatedAt: now,
+                                      adminNotes: adminNotesController.text.trim().isEmpty
+                                          ? null
+                                          : adminNotesController.text.trim(),
+                                    );
+                                    
+                                    // Create appointment in Firestore
+                                    await _firestoreService.createAppointment(appointment);
+                                    
+                                    logSuccess('Manual appointment created successfully', tag: 'AdminAppointmentsScreen');
+                                    
+                                    if (mounted) {
+                                      Navigator.of(context).pop();
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Appointment created successfully'),
+                                          backgroundColor: AppColors.successGreen,
+                                          duration: Duration(seconds: 2),
+                                        ),
+                                      );
+                                    }
+                                  } catch (e, stackTrace) {
+                                    logError(
+                                      'Failed to create appointment',
+                                      tag: 'AdminAppointmentsScreen',
+                                      error: e,
+                                      stackTrace: stackTrace,
+                                    );
+                                    if (mounted) {
+                                      setDialogState(() {
+                                        isCreating = false;
+                                      });
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Failed to create appointment: ${e.toString()}'),
+                                          backgroundColor: AppColors.errorRed,
+                                          duration: const Duration(seconds: 3),
+                                        ),
+                                      );
+                                    }
+                                  }
+                                },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.sunflowerYellow,
+                            foregroundColor: AppColors.darkBrown,
+                          ),
+                          child: isCreating
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Text('Create Appointment'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
+    
+    // Cleanup controllers
+    clientFirstNameController.dispose();
+    clientLastNameController.dispose();
+    clientEmailController.dispose();
+    clientPhoneController.dispose();
+    intakeNotesController.dispose();
+    adminNotesController.dispose();
+    depositAmountController.dispose();
   }
 
   // MARK: - Helper Widgets

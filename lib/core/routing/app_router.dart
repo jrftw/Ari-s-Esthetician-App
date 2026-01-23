@@ -2,7 +2,7 @@
  * Filename: app_router.dart
  * Purpose: Application routing configuration with role-based access control
  * Author: Kevin Doyle Jr. / Infinitum Imagery LLC
- * Last Modified: 2024-01-XX
+ * Last Modified: 2026-01-22
  * Dependencies: go_router, firebase_auth
  * Platform Compatibility: iOS, Android, Web
  */
@@ -11,17 +11,23 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:async';
 import '../constants/app_constants.dart';
 import '../logging/app_logger.dart';
 import '../../services/auth_service.dart';
+import '../../services/preferences_service.dart';
 import '../../screens/client/client_booking_screen.dart';
 import '../../screens/client/client_confirmation_screen.dart';
+import '../../screens/client/client_appointments_screen.dart';
 import '../../screens/admin/admin_dashboard_screen.dart';
 import '../../screens/admin/admin_services_screen.dart';
 import '../../screens/admin/admin_appointments_screen.dart';
 import '../../screens/admin/admin_clients_screen.dart';
 import '../../screens/admin/admin_settings_screen.dart';
 import '../../screens/admin/admin_category_management_screen.dart';
+import '../../screens/admin/admin_earnings_screen.dart';
+import '../../screens/admin/admin_notifications_screen.dart';
+import '../../screens/admin/admin_software_enhancements_screen.dart';
 import '../../screens/auth/login_screen.dart';
 import '../../screens/auth/signup_screen.dart';
 import '../../screens/splash_screen.dart';
@@ -29,11 +35,66 @@ import '../../screens/welcome/welcome_screen.dart';
 import '../../screens/welcome/account_choice_screen.dart';
 import '../../screens/settings/settings_screen.dart';
 
+// MARK: - Auth State Notifier
+/// Notifier that listens to Firebase Auth state changes
+/// Used to refresh router when auth state changes
+class _AuthStateNotifier extends ChangeNotifier {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  StreamSubscription<User?>? _authSubscription;
+  bool _isInitialized = false;
+  User? _currentUser;
+
+  _AuthStateNotifier() {
+    _init();
+  }
+
+  /// Initialize auth state listener
+  void _init() {
+    logAuth('Initializing AuthStateNotifier', tag: 'AuthStateNotifier');
+    
+    // Get initial user state
+    _currentUser = _auth.currentUser;
+    logAuth('Initial user: ${_currentUser?.email ?? "null"}', tag: 'AuthStateNotifier');
+    
+    // Listen to auth state changes
+    _authSubscription = _auth.authStateChanges().listen((user) {
+      logAuth('Auth state changed: ${user?.email ?? "null"}', tag: 'AuthStateNotifier');
+      final wasInitialized = _isInitialized;
+      _isInitialized = true;
+      _currentUser = user;
+      
+      // Only notify if we've already initialized (to avoid initial double notification)
+      if (wasInitialized) {
+        notifyListeners();
+      } else {
+        // First time - notify after a short delay to ensure auth state is fully restored
+        Future.delayed(const Duration(milliseconds: 100), () {
+          notifyListeners();
+        });
+      }
+    });
+  }
+
+  /// Get current user
+  User? get currentUser => _currentUser;
+
+  /// Check if auth state has been initialized
+  bool get isInitialized => _isInitialized;
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
+  }
+}
+
 // MARK: - Router Configuration
 /// Application router with role-based routing
 /// Handles navigation between client and admin screens
 class AppRouter {
   final AuthService _authService = AuthService();
+  final PreferencesService _preferencesService = PreferencesService.instance;
+  final _AuthStateNotifier _authStateNotifier = _AuthStateNotifier();
 
   /// Get the configured GoRouter instance
   GoRouter get router {
@@ -43,6 +104,7 @@ class AppRouter {
     
     return GoRouter(
       initialLocation: AppConstants.routeWelcome,
+      refreshListenable: _authStateNotifier,
       redirect: _handleRedirect,
       routes: [
         // MARK: - Splash Route
@@ -102,6 +164,14 @@ class AppRouter {
             return ClientConfirmationScreen(appointmentId: appointmentId);
           },
         ),
+        GoRoute(
+          path: AppConstants.routeClientAppointments,
+          name: 'client-appointments',
+          builder: (context, state) {
+            logRouter('Building ClientAppointmentsScreen route', tag: 'AppRouter');
+            return const ClientAppointmentsScreen();
+          },
+        ),
 
         // MARK: - Admin Routes
         GoRoute(
@@ -134,6 +204,21 @@ class AppRouter {
           name: 'admin-categories',
           builder: (context, state) => const AdminCategoryManagementScreen(),
         ),
+        GoRoute(
+          path: AppConstants.routeAdminEarnings,
+          name: 'admin-earnings',
+          builder: (context, state) => const AdminEarningsScreen(),
+        ),
+        GoRoute(
+          path: AppConstants.routeAdminNotifications,
+          name: 'admin-notifications',
+          builder: (context, state) => const AdminNotificationsScreen(),
+        ),
+        GoRoute(
+          path: AppConstants.routeAdminSoftwareEnhancements,
+          name: 'admin-software-enhancements',
+          builder: (context, state) => const AdminSoftwareEnhancementsScreen(),
+        ),
 
         // MARK: - Settings Route (General)
         GoRoute(
@@ -150,12 +235,45 @@ class AppRouter {
 
   // MARK: - Redirect Handler
   /// Handles route redirection based on authentication and role
+  /// Waits for auth state to be restored before making routing decisions
   Future<String?> _handleRedirect(BuildContext context, GoRouterState state) async {
     logRouter('Handling redirect for: ${state.matchedLocation}', tag: 'AppRouter');
     logDebug('Full location: ${state.uri}', tag: 'AppRouter');
     
-    final user = FirebaseAuth.instance.currentUser;
+    // MARK: - Wait for Auth State Initialization
+    /// Wait for auth state to be restored (important for web/simulator refresh)
+    /// Firebase Auth on web needs time to restore session from IndexedDB
+    if (!_authStateNotifier.isInitialized) {
+      logAuth('Auth state not initialized yet - waiting...', tag: 'AppRouter');
+      // Wait for auth state to be initialized (max 3 seconds)
+      int attempts = 0;
+      while (!_authStateNotifier.isInitialized && attempts < 30) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        attempts++;
+      }
+      logAuth('Auth state initialization check complete (attempts: $attempts)', tag: 'AppRouter');
+    }
+    
+    // Get current user from notifier (which has the latest state)
+    final user = _authStateNotifier.currentUser ?? FirebaseAuth.instance.currentUser;
     logAuth('Current user: ${user?.email ?? "null"}', tag: 'AppRouter');
+    
+    // MARK: - Check for Session Restoration
+    /// If user is null but "keep signed in" is enabled, try to restore session
+    if (user == null) {
+      final keepSignedIn = await _preferencesService.getKeepSignedIn();
+      if (keepSignedIn) {
+        logAuth('Keep signed in enabled but no user - checking for session restoration', tag: 'AppRouter');
+        // Wait a bit more for Firebase Auth to restore session
+        await Future.delayed(const Duration(milliseconds: 500));
+        final restoredUser = FirebaseAuth.instance.currentUser;
+        if (restoredUser != null) {
+          logAuth('Session restored: ${restoredUser.email}', tag: 'AppRouter');
+          // Update notifier with restored user
+          _authStateNotifier.notifyListeners();
+        }
+      }
+    }
     
     final isLoginRoute = state.matchedLocation == '/login';
     final isSignupRoute = state.matchedLocation == '/signup';
@@ -164,18 +282,22 @@ class AppRouter {
     final isAccountChoiceRoute = state.matchedLocation == AppConstants.routeAccountChoice;
     final isBookingRoute = state.matchedLocation == AppConstants.routeClientBooking;
     final isConfirmationRoute = state.matchedLocation.startsWith(AppConstants.routeClientConfirmation);
+    final isAppointmentsRoute = state.matchedLocation == AppConstants.routeClientAppointments;
     final isSettingsRoute = state.matchedLocation == AppConstants.routeSettings;
 
     logDebug('Route checks - Login: $isLoginRoute, Signup: $isSignupRoute, Splash: $isSplashRoute, Welcome: $isWelcomeRoute, AccountChoice: $isAccountChoiceRoute, Booking: $isBookingRoute, Confirmation: $isConfirmationRoute, Settings: $isSettingsRoute', tag: 'AppRouter');
 
     // Allow public routes without authentication
-    if (isSplashRoute || isWelcomeRoute || isAccountChoiceRoute || isLoginRoute || isSignupRoute || isBookingRoute || isConfirmationRoute || isSettingsRoute) {
+    if (isSplashRoute || isWelcomeRoute || isAccountChoiceRoute || isLoginRoute || isSignupRoute || isBookingRoute || isConfirmationRoute || isAppointmentsRoute || isSettingsRoute) {
       logRouter('Public route - allowing navigation', tag: 'AppRouter');
       return null;
     }
 
+    // Get final user state after potential restoration
+    final finalUser = _authStateNotifier.currentUser ?? FirebaseAuth.instance.currentUser;
+    
     // Redirect to login if not authenticated for protected routes
-    if (user == null) {
+    if (finalUser == null) {
       logRouter('No user - redirecting to /login', tag: 'AppRouter');
       return '/login';
     }
@@ -199,8 +321,9 @@ class AppRouter {
     // Allow admins to access client routes (for "view as client" feature)
     // Client routes are public, but we log when admins access them
     final isClientRoute = state.matchedLocation == AppConstants.routeClientBooking ||
-        state.matchedLocation.startsWith(AppConstants.routeClientConfirmation);
-    if (isClientRoute && user != null) {
+        state.matchedLocation.startsWith(AppConstants.routeClientConfirmation) ||
+        state.matchedLocation == AppConstants.routeClientAppointments;
+    if (isClientRoute && finalUser != null) {
       final isAdmin = await _authService.isAdmin();
       if (isAdmin) {
         logRouter('Admin user accessing client route - allowing for view-as-client feature', tag: 'AppRouter');

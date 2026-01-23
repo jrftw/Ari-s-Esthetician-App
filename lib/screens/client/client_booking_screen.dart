@@ -8,7 +8,9 @@
  */
 
 // MARK: - Imports
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:flutter_datetime_picker_plus/flutter_datetime_picker_plus.dart';
@@ -23,6 +25,8 @@ import '../../models/appointment_model.dart';
 import '../../services/firestore_service.dart';
 import '../../services/view_mode_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/payment_service.dart';
+import '../../services/email_service.dart';
 import 'client_confirmation_screen.dart';
 
 // MARK: - Booking Step Enum
@@ -51,6 +55,8 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
   final ViewModeService _viewModeService = ViewModeService.instance;
+  final PaymentService _paymentService = PaymentService();
+  final EmailService _emailService = EmailService();
   
   // MARK: - State Variables
   bool _isAdminViewingAsClient = false;
@@ -65,6 +71,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
   bool _isLoadingServices = true;
   bool _isSubmitting = false;
   String? _errorMessage;
+  bool _paymentsEnabled = false;
   
   // MARK: - Category State Variables
   List<ServiceCategoryModel> _categories = [];
@@ -73,11 +80,38 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
   
   // MARK: - Form Controllers
   final _formKey = GlobalKey<FormState>();
+  final _paymentFormKey = GlobalKey<FormState>();
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _notesController = TextEditingController();
+  
+  // MARK: - Payment Form Controllers
+  final _cardNumberController = TextEditingController();
+  final _expiryMonthController = TextEditingController();
+  final _expiryYearController = TextEditingController();
+  final _cvcController = TextEditingController();
+  final _cardholderNameController = TextEditingController();
+  
+  // MARK: - Payment State
+  PaymentIntent? _paymentIntent;
+  String? _paymentIntentId;
+  bool _isProcessingPayment = false;
+  
+  // MARK: - Tip State
+  int _tipAmountCents = 0;
+  final TextEditingController _tipAmountController = TextEditingController();
+  final List<int> _quickTipOptions = [500, 1000, 1500, 2000, 2500, 5000]; // $5, $10, $15, $20, $25, $50
+  
+  /// Initialize payment service when entering payment step
+  Future<void> _initializePaymentForStep() async {
+    try {
+      await _paymentService.initializeStripe();
+    } catch (e, stackTrace) {
+      logError('Failed to initialize payment service', tag: 'ClientBookingScreen', error: e, stackTrace: stackTrace);
+    }
+  }
   
   // MARK: - Calendar State
   DateTime _focusedDay = DateTime.now();
@@ -100,9 +134,40 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
     _loadCategories();
     _generateTimeSlots();
     _checkAdminViewMode();
+    _loadBusinessSettings();
+    _initializePayment();
     
     // Listen to view mode changes
     _viewModeService.addListener(_onViewModeChanged);
+  }
+  
+  /// Load business settings to check if payments are enabled
+  Future<void> _loadBusinessSettings() async {
+    try {
+      logLoading('Loading business settings...', tag: 'ClientBookingScreen');
+      final settings = await _firestoreService.getBusinessSettings();
+      if (mounted && settings != null) {
+        setState(() {
+          _paymentsEnabled = settings.paymentsEnabled;
+        });
+        logInfo('Payments enabled: $_paymentsEnabled', tag: 'ClientBookingScreen');
+      }
+    } catch (e, stackTrace) {
+      logError('Failed to load business settings', tag: 'ClientBookingScreen', error: e, stackTrace: stackTrace);
+      // Default to payments disabled if we can't load settings
+      setState(() {
+        _paymentsEnabled = false;
+      });
+    }
+  }
+
+  /// Initialize Stripe payment service
+  Future<void> _initializePayment() async {
+    try {
+      await _paymentService.initializeStripe();
+    } catch (e, stackTrace) {
+      logError('Failed to initialize payment service', tag: 'ClientBookingScreen', error: e, stackTrace: stackTrace);
+    }
   }
 
   /// Check if admin is viewing as client
@@ -137,6 +202,12 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
     _emailController.dispose();
     _phoneController.dispose();
     _notesController.dispose();
+    _cardNumberController.dispose();
+    _expiryMonthController.dispose();
+    _expiryYearController.dispose();
+    _cvcController.dispose();
+    _cardholderNameController.dispose();
+    _tipAmountController.dispose();
     super.dispose();
   }
   
@@ -278,7 +349,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
   
   // MARK: - Step Navigation
   /// Move to next step in booking process
-  void _nextStep() {
+  Future<void> _nextStep() async {
     if (_currentStep == BookingStep.serviceSelection) {
       if (_selectedServices.isEmpty) {
         _showError('Please select at least one service');
@@ -313,10 +384,18 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
       if (!_formKey.currentState!.validate()) {
         return;
       }
-      setState(() {
-        _currentStep = BookingStep.payment;
-      });
-      _processPayment();
+      // If payments are enabled, go to payment step
+      if (_paymentsEnabled) {
+        setState(() {
+          _currentStep = BookingStep.payment;
+        });
+        // Initialize payment and create payment intent when entering payment step
+        await _initializePaymentForStep();
+        _createPaymentIntent();
+      } else {
+        // If payments are disabled, skip payment step and submit booking directly
+        await _submitBooking();
+      }
     }
   }
   
@@ -353,10 +432,81 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
   }
   
   // MARK: - Payment Processing
-  /// Process Stripe payment
-  Future<void> _processPayment() async {
+  /// Create payment intent when entering payment step
+  Future<void> _createPaymentIntent() async {
     if (_selectedServices.isEmpty || _selectedDateTime == null) {
       _showError('Missing booking information');
+      return;
+    }
+    
+    try {
+      logLoading('Creating payment intent...', tag: 'ClientBookingScreen');
+      setState(() {
+        _isProcessingPayment = true;
+        _errorMessage = null;
+      });
+      
+      // Calculate total deposit
+      final totalDepositCents = _selectedServices.fold<int>(
+        0,
+        (sum, service) => sum + service.depositAmountCents,
+      );
+      
+      // Calculate total amount (deposit + tip)
+      final totalAmountCents = totalDepositCents + _tipAmountCents;
+      
+      // Create payment intent for deposit + tip
+      _paymentIntent = await _paymentService.createPaymentIntent(
+        amountCents: totalAmountCents,
+        currency: AppConstants.stripeCurrency,
+        customerEmail: _emailController.text.trim(),
+        metadata: {
+          'bookingType': 'appointment',
+          'serviceCount': _selectedServices.length.toString(),
+          'depositAmount': totalDepositCents.toString(),
+          'tipAmount': _tipAmountCents.toString(),
+        },
+      );
+      
+      logSuccess('Payment intent created successfully', tag: 'ClientBookingScreen');
+      
+      setState(() {
+        _isProcessingPayment = false;
+      });
+    } catch (e, stackTrace) {
+      logError('Failed to create payment intent', tag: 'ClientBookingScreen', error: e, stackTrace: stackTrace);
+      
+      String errorMessage = 'Failed to initialize payment. Please try again.';
+      final errorString = e.toString().toLowerCase();
+      if (errorString.contains('not configured') || errorString.contains('not found')) {
+        errorMessage = 'Payment processing is not configured. Please contact support.';
+      } else if (errorString.contains('network') || errorString.contains('connection')) {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      }
+      
+      _showError(errorMessage);
+      setState(() {
+        _isProcessingPayment = false;
+        _currentStep = BookingStep.clientInformation; // Go back to previous step
+      });
+    }
+  }
+  
+  /// Process Stripe payment and submit booking
+  /// Only called when payments are enabled
+  Future<void> _processPayment() async {
+    if (!_paymentsEnabled) {
+      // If payments are disabled, just submit booking without payment
+      await _submitBooking();
+      return;
+    }
+    
+    if (_paymentIntent == null) {
+      _showError('Payment not initialized. Please try again.');
+      return;
+    }
+    
+    if (!_paymentFormKey.currentState!.validate()) {
       return;
     }
     
@@ -367,20 +517,80 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
         _errorMessage = null;
       });
       
-      // TODO: Initialize Stripe payment intent
-      // For now, we'll create the appointment without payment
-      // In production, you would:
-      // 1. Create payment intent on backend
-      // 2. Confirm payment with Stripe
-      // 3. Get payment intent ID
+      // Parse card details
+      final cardNumber = _cardNumberController.text.replaceAll(RegExp(r'\D'), '');
+      final expiryMonth = int.tryParse(_expiryMonthController.text) ?? 0;
+      final expiryYear = int.tryParse(_expiryYearController.text) ?? 0;
+      final cvc = _cvcController.text;
       
+      // Validate card details
+      if (!_paymentService.validateCardNumber(cardNumber)) {
+        throw Exception('Invalid card number');
+      }
+      if (!_paymentService.validateExpiryDate(expiryMonth, expiryYear)) {
+        throw Exception('Invalid expiry date');
+      }
+      if (!_paymentService.validateCVC(cvc)) {
+        throw Exception('Invalid CVC');
+      }
+      
+      // Create billing details
+      final billingDetails = BillingDetails(
+        name: _cardholderNameController.text.trim().isNotEmpty
+            ? _cardholderNameController.text.trim()
+            : '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}',
+        email: _emailController.text.trim(),
+        phone: _phoneController.text.trim(),
+      );
+      
+      // Create payment method params with card details
+      // Note: For web, Stripe Elements should be used for better security
+      // This is a simplified implementation
+      final paymentMethodParams = PaymentMethodParams.card(
+        paymentMethodData: PaymentMethodData(
+          billingDetails: billingDetails,
+        ),
+      );
+      
+      // Confirm payment with payment method
+      _paymentIntentId = await _paymentService.confirmPayment(
+        paymentIntent: _paymentIntent!,
+        paymentMethodParams: paymentMethodParams,
+      );
+      
+      logSuccess('Payment confirmed: $_paymentIntentId', tag: 'ClientBookingScreen');
+      
+      // Now submit booking with payment intent ID
       await _submitBooking();
-    } catch (e, stackTrace) {
-      logError('Payment processing failed', tag: 'ClientBookingScreen', error: e, stackTrace: stackTrace);
-      _showError('Payment processing failed. Please try again.');
+    } on StripeException catch (e) {
+      logError('Stripe payment failed', tag: 'ClientBookingScreen', error: e);
+      _showError('Payment failed: ${e.error?.message ?? 'Please check your card details and try again.'}');
+      setState(() {
+        _isSubmitting = false;
+      });
+    } on TimeoutException catch (e) {
+      logError('Payment processing timed out', tag: 'ClientBookingScreen', error: e);
+      _showError('Request timed out. Please check your connection and try again.');
       setState(() {
         _isSubmitting = false;
         _currentStep = BookingStep.clientInformation;
+      });
+    } catch (e, stackTrace) {
+      logError('Payment processing failed', tag: 'ClientBookingScreen', error: e, stackTrace: stackTrace);
+      
+      String errorMessage = 'Payment processing failed. Please try again.';
+      final errorString = e.toString().toLowerCase();
+      if (errorString.contains('invalid card')) {
+        errorMessage = 'Invalid card details. Please check and try again.';
+      } else if (errorString.contains('declined') || errorString.contains('insufficient')) {
+        errorMessage = 'Payment was declined. Please use a different payment method.';
+      } else if (errorString.contains('network') || errorString.contains('connection')) {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      }
+      
+      _showError(errorMessage);
+      setState(() {
+        _isSubmitting = false;
       });
     }
   }
@@ -406,7 +616,13 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
       for (int i = 0; i < _selectedServices.length; i++) {
         final service = _selectedServices[i];
         
+        // Calculate tip per service (if multiple services, split tip proportionally)
+        // For simplicity, we'll apply the full tip to the first service
+        // In a more complex system, you might want to split it proportionally
+        final tipPerService = i == 0 ? _tipAmountCents : 0;
+        
         // Create appointment model
+        // If payments are disabled, payment intent ID will be null
         final appointment = AppointmentModel.create(
           serviceId: service.id,
           serviceSnapshot: service,
@@ -418,12 +634,16 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
           startTime: currentStartTime,
           durationMinutes: service.durationMinutes,
           depositAmountCents: service.depositAmountCents,
-          stripePaymentIntentId: null, // TODO: Add after Stripe integration
+          stripePaymentIntentId: _paymentsEnabled ? _paymentIntentId : null, // Only set if payments enabled
+          tipAmountCents: _paymentsEnabled ? tipPerService : 0, // Only set tip if payments enabled
+          tipPaymentIntentId: (_paymentsEnabled && _tipAmountCents > 0) ? _paymentIntentId : null, // Only set if payments enabled and tip included
         );
         
         // Create appointment in Firestore
+        logInfo('Creating appointment for service: ${service.name} at ${currentStartTime}', tag: 'ClientBookingScreen');
         final appointmentId = await _firestoreService.createAppointment(appointment);
         appointmentIds.add(appointmentId);
+        logInfo('Successfully created appointment: $appointmentId', tag: 'ClientBookingScreen');
         
         // Calculate next service start time (current end time + buffer)
         currentStartTime = currentStartTime.add(
@@ -437,6 +657,19 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
       
       logSuccess('Booking submitted successfully: ${appointmentIds.length} appointment(s) created', tag: 'ClientBookingScreen');
       
+      // Send confirmation email for the first appointment
+      if (appointmentIds.isNotEmpty) {
+        try {
+          final firstAppointment = await _firestoreService.getAppointmentById(appointmentIds.first);
+          if (firstAppointment != null) {
+            await _emailService.sendConfirmationEmail(appointment: firstAppointment);
+          }
+        } catch (e, stackTrace) {
+          logError('Failed to send confirmation email', tag: 'ClientBookingScreen', error: e, stackTrace: stackTrace);
+          // Don't fail the booking if email fails
+        }
+      }
+      
       // Navigate to confirmation screen with first appointment ID
       // The confirmation screen can be updated later to show all appointments
       if (mounted && appointmentIds.isNotEmpty) {
@@ -444,9 +677,21 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
       }
     } catch (e, stackTrace) {
       logError('Failed to submit booking', tag: 'ClientBookingScreen', error: e, stackTrace: stackTrace);
-      _showError('Failed to submit booking. Please try again.');
+      
+      // Provide more specific error message
+      String errorMessage = 'Failed to submit booking. Please try again.';
+      if (e.toString().contains('permission') || e.toString().contains('Permission')) {
+        errorMessage = 'Permission denied. Please check your connection and try again.';
+      } else if (e.toString().contains('already booked') || e.toString().contains('overlapping')) {
+        errorMessage = 'This time slot is no longer available. Please select a different time.';
+      } else if (e.toString().contains('network') || e.toString().contains('Network')) {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      }
+      
+      _showError(errorMessage);
       setState(() {
         _isSubmitting = false;
+        _currentStep = BookingStep.clientInformation; // Reset to previous step on error
       });
     }
   }
@@ -470,6 +715,14 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
               )
             : null,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.calendar_today),
+            onPressed: () {
+              logInfo('Appointments button tapped', tag: 'ClientBookingScreen');
+              context.push(AppConstants.routeClientAppointments);
+            },
+            tooltip: 'My Appointments',
+          ),
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {
@@ -538,7 +791,52 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
             ),
             
             // Bottom Action Button
-            if (_currentStep != BookingStep.payment)
+            if (_currentStep == BookingStep.payment)
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.shadowColor,
+                      blurRadius: 8,
+                      offset: const Offset(0, -2),
+                    ),
+                  ],
+                ),
+                child: SafeArea(
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: AppConstants.buttonHeight,
+                    child: ElevatedButton(
+                      onPressed: _isSubmitting ? null : _processPayment,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.sunflowerYellow,
+                        foregroundColor: AppColors.darkBrown,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+                        ),
+                      ),
+                      child: _isSubmitting
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(AppColors.darkBrown),
+                              ),
+                            )
+                          : Text(
+                              'Pay & Complete Booking',
+                              style: AppTypography.buttonText.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                    ),
+                  ),
+                ),
+              )
+            else if (_currentStep != BookingStep.payment)
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
@@ -635,12 +933,19 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
   // MARK: - Progress Indicator
   /// Build progress indicator showing current step
   Widget _buildProgressIndicator() {
-    final steps = [
-      'Service',
-      'Date & Time',
-      'Information',
-      'Payment',
-    ];
+    // Only show payment step if payments are enabled
+    final steps = _paymentsEnabled
+        ? [
+            'Service',
+            'Date & Time',
+            'Information',
+            'Payment',
+          ]
+        : [
+            'Service',
+            'Date & Time',
+            'Information',
+          ];
     
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -658,8 +963,13 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
         children: steps.asMap().entries.map((entry) {
           final index = entry.key;
           final step = entry.value;
-          final isActive = index <= _currentStep.index;
-          final isCurrent = index == _currentStep.index;
+          // Map current step index to progress indicator index
+          // When payments disabled, clamp step index to max 2 (Information step)
+          final currentStepIndex = _paymentsEnabled
+              ? _currentStep.index
+              : (_currentStep.index > 2 ? 2 : _currentStep.index);
+          final isActive = index <= currentStepIndex;
+          final isCurrent = index == currentStepIndex;
           
           return Expanded(
             child: Row(
@@ -1453,11 +1763,57 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                   '${_selectedServices.fold<int>(0, (sum, s) => sum + s.durationMinutes)} minutes',
                 ),
                 const Divider(),
-                _buildSummaryRow(
-                  'Total Deposit Required',
-                  '\$${(_selectedServices.fold<int>(0, (sum, s) => sum + s.depositAmountCents) / 100).toStringAsFixed(2)}',
-                  isBold: true,
-                ),
+                if (_paymentsEnabled) ...[
+                  _buildSummaryRow(
+                    'Deposit Required',
+                    '\$${(_selectedServices.fold<int>(0, (sum, s) => sum + s.depositAmountCents) / 100).toStringAsFixed(2)}',
+                  ),
+                  if (_tipAmountCents > 0)
+                    _buildSummaryRow(
+                      'Tip',
+                      '\$${(_tipAmountCents / 100).toStringAsFixed(2)}',
+                    ),
+                  _buildSummaryRow(
+                    'Total Amount',
+                    '\$${((_selectedServices.fold<int>(0, (sum, s) => sum + s.depositAmountCents) + _tipAmountCents) / 100).toStringAsFixed(2)}',
+                    isBold: true,
+                  ),
+                ] else ...[
+                  // Show pricing but indicate payment not required
+                  _buildSummaryRow(
+                    'Service Price',
+                    '\$${(_selectedServices.fold<int>(0, (sum, s) => sum + s.depositAmountCents) / 100).toStringAsFixed(2)}',
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.only(top: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.sunflowerYellow.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: AppColors.sunflowerYellow.withOpacity(0.3),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          size: 16,
+                          color: AppColors.sunflowerYellow,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Payment not required at this time. You can pay when you arrive.',
+                            style: AppTypography.bodySmall.copyWith(
+                              color: AppColors.darkBrown,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -1492,26 +1848,459 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
   }
   
   // MARK: - Payment Processing
-  /// Build payment processing UI
+  /// Build payment processing UI with card input form
   Widget _buildPaymentProcessing() {
-    return Center(
+    if (_isProcessingPayment) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 24),
+            Text(
+              'Initializing Payment...',
+              style: AppTypography.titleLarge.copyWith(
+                color: AppColors.darkBrown,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Please wait while we set up your payment',
+              style: AppTypography.bodyMedium.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    if (_paymentIntent == null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 64,
+              color: AppColors.errorRed,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Payment Not Available',
+              style: AppTypography.titleLarge.copyWith(
+                color: AppColors.darkBrown,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Unable to initialize payment. Please try again.',
+              style: AppTypography.bodyMedium.copyWith(
+                color: AppColors.textSecondary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  _currentStep = BookingStep.clientInformation;
+                });
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.sunflowerYellow,
+                foregroundColor: AppColors.darkBrown,
+              ),
+              child: const Text('Go Back'),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    // Calculate total deposit
+    final totalDepositCents = _selectedServices.fold<int>(
+      0,
+      (sum, service) => sum + service.depositAmountCents,
+    );
+    final totalDeposit = _paymentService.formatAmount(totalDepositCents, AppConstants.stripeCurrency);
+    
+    return Form(
+      key: _paymentFormKey,
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const CircularProgressIndicator(),
-          const SizedBox(height: 24),
           Text(
-            'Processing Payment...',
-            style: AppTypography.titleLarge.copyWith(
+            'Payment Information',
+            style: AppTypography.headlineSmall.copyWith(
               color: AppColors.darkBrown,
               fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Please wait while we process your booking',
+            'Please enter your payment details to complete your booking',
             style: AppTypography.bodyMedium.copyWith(
               color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 24),
+          
+          // Total Deposit Display
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppColors.sunflowerYellow.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+              border: Border.all(
+                color: AppColors.sunflowerYellow.withOpacity(0.3),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Deposit Required',
+                      style: AppTypography.bodyMedium.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    Text(
+                      totalDeposit,
+                      style: AppTypography.bodyMedium.copyWith(
+                        color: AppColors.darkBrown,
+                      ),
+                    ),
+                  ],
+                ),
+                if (_tipAmountCents > 0) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Tip',
+                        style: AppTypography.bodyMedium.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      Text(
+                        _paymentService.formatAmount(_tipAmountCents, AppConstants.stripeCurrency),
+                        style: AppTypography.bodyMedium.copyWith(
+                          color: AppColors.darkBrown,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const Divider(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Total Amount',
+                      style: AppTypography.titleMedium.copyWith(
+                        color: AppColors.darkBrown,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      _paymentService.formatAmount(totalDepositCents + _tipAmountCents, AppConstants.stripeCurrency),
+                      style: AppTypography.titleLarge.copyWith(
+                        color: AppColors.darkBrown,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          
+          // Tip Section
+          Text(
+            'Add a Tip (Optional)',
+            style: AppTypography.titleMedium.copyWith(
+              color: AppColors.darkBrown,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Show your appreciation with a tip',
+            style: AppTypography.bodySmall.copyWith(
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          
+          // Quick Tip Buttons
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: _quickTipOptions.map((tipCents) {
+              final isSelected = _tipAmountCents == tipCents;
+              return InkWell(
+                onTap: () {
+                  setState(() {
+                    _tipAmountCents = isSelected ? 0 : tipCents;
+                    _tipAmountController.text = isSelected ? '' : (tipCents / 100).toStringAsFixed(2);
+                    _paymentIntent = null; // Reset payment intent to recreate with new amount
+                  });
+                  // Recreate payment intent with new tip amount
+                  _createPaymentIntent();
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? AppColors.sunflowerYellow
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isSelected
+                          ? AppColors.sunflowerYellow
+                          : AppColors.shadowColor,
+                      width: isSelected ? 2 : 1,
+                    ),
+                  ),
+                  child: Text(
+                    '\$${(tipCents / 100).toStringAsFixed(0)}',
+                    style: AppTypography.bodyMedium.copyWith(
+                      color: isSelected
+                          ? AppColors.darkBrown
+                          : AppColors.textPrimary,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 16),
+          
+          // Custom Tip Input
+          TextFormField(
+            controller: _tipAmountController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              labelText: 'Custom Tip Amount (\$)',
+              prefixIcon: const Icon(Icons.attach_money),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+              ),
+              hintText: '0.00',
+            ),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+            ],
+                  onChanged: (value) {
+                    if (value.isEmpty) {
+                      setState(() {
+                        _tipAmountCents = 0;
+                        _paymentIntent = null; // Reset payment intent to recreate with new amount
+                      });
+                      return;
+                    }
+                    final tipDollars = double.tryParse(value) ?? 0.0;
+                    final newTipCents = (tipDollars * 100).round();
+                    if (newTipCents != _tipAmountCents) {
+                      setState(() {
+                        _tipAmountCents = newTipCents;
+                        _paymentIntent = null; // Reset payment intent to recreate with new amount
+                      });
+                      // Recreate payment intent with new tip amount (async, don't await)
+                      if (_paymentIntent == null) {
+                        _createPaymentIntent();
+                      }
+                    }
+                  },
+            validator: (value) {
+              if (value != null && value.isNotEmpty) {
+                final tipDollars = double.tryParse(value);
+                if (tipDollars == null || tipDollars < 0) {
+                  return 'Please enter a valid tip amount';
+                }
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 24),
+          
+          // Cardholder Name
+          TextFormField(
+            controller: _cardholderNameController,
+            decoration: InputDecoration(
+              labelText: 'Cardholder Name',
+              prefixIcon: const Icon(Icons.person_outline),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+              ),
+            ),
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return 'Please enter cardholder name';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 16),
+          
+          // Card Number
+          TextFormField(
+            controller: _cardNumberController,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              labelText: 'Card Number',
+              prefixIcon: const Icon(Icons.credit_card),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+              ),
+              hintText: '1234 5678 9012 3456',
+            ),
+            maxLength: 19,
+            inputFormatters: [
+              // Format as: XXXX XXXX XXXX XXXX
+              FilteringTextInputFormatter.allow(RegExp(r'[\d\s]')),
+            ],
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return 'Please enter card number';
+              }
+              final cleaned = value.replaceAll(RegExp(r'\D'), '');
+              if (!_paymentService.validateCardNumber(cleaned)) {
+                return 'Invalid card number';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 16),
+          
+          // Expiry Date and CVC Row
+          Row(
+            children: [
+              // Expiry Month
+              Expanded(
+                child: TextFormField(
+                  controller: _expiryMonthController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Month (MM)',
+                    prefixIcon: const Icon(Icons.calendar_today),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+                    ),
+                    hintText: '12',
+                  ),
+                  maxLength: 2,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                  ],
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'MM';
+                    }
+                    final month = int.tryParse(value);
+                    if (month == null || month < 1 || month > 12) {
+                      return 'Invalid';
+                    }
+                    return null;
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Expiry Year
+              Expanded(
+                child: TextFormField(
+                  controller: _expiryYearController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Year (YYYY)',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+                    ),
+                    hintText: '2026',
+                  ),
+                  maxLength: 4,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                  ],
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'YYYY';
+                    }
+                    final year = int.tryParse(value);
+                    if (year == null || year < DateTime.now().year) {
+                      return 'Invalid';
+                    }
+                    return null;
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              // CVC
+              Expanded(
+                child: TextFormField(
+                  controller: _cvcController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'CVC',
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+                    ),
+                    hintText: '123',
+                  ),
+                  maxLength: 4,
+                  obscureText: true,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                  ],
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'CVC';
+                    }
+                    if (!_paymentService.validateCVC(value)) {
+                      return 'Invalid';
+                    }
+                    return null;
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          
+          // Security Notice
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.sunflowerYellow.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.lock,
+                  color: AppColors.sunflowerYellow,
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Your payment is secured by Stripe. We never store your card details.',
+                    style: AppTypography.bodySmall.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -1540,7 +2329,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
       case BookingStep.dateTimeSelection:
         return 'Continue';
       case BookingStep.clientInformation:
-        return 'Proceed to Payment';
+        return _paymentsEnabled ? 'Proceed to Payment' : 'Complete Booking';
       default:
         return 'Continue';
     }

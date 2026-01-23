@@ -10,10 +10,8 @@ AppointmentModel _$AppointmentModelFromJson(Map<String, dynamic> json) =>
     AppointmentModel(
       id: json['id'] as String,
       serviceId: json['serviceId'] as String,
-      serviceSnapshot: json['serviceSnapshot'] == null
-          ? null
-          : ServiceModel.fromJson(
-              json['serviceSnapshot'] as Map<String, dynamic>),
+      serviceSnapshot:
+          AppointmentModel._serviceModelFromJson(json['serviceSnapshot']),
       clientFirstName: json['clientFirstName'] as String,
       clientLastName: json['clientLastName'] as String,
       clientEmail: json['clientEmail'] as String,
@@ -25,6 +23,12 @@ AppointmentModel _$AppointmentModelFromJson(Map<String, dynamic> json) =>
           AppointmentStatus.confirmed,
       depositAmountCents: (json['depositAmountCents'] as num).toInt(),
       stripePaymentIntentId: json['stripePaymentIntentId'] as String?,
+      tipAmountCents: (json['tipAmountCents'] as num?)?.toInt() ?? 0,
+      tipPaymentIntentId: json['tipPaymentIntentId'] as String?,
+      postAppointmentTipAmountCents:
+          (json['postAppointmentTipAmountCents'] as num?)?.toInt(),
+      postAppointmentTipPaymentIntentId:
+          json['postAppointmentTipPaymentIntentId'] as String?,
       depositForfeited: json['depositForfeited'] as bool? ?? false,
       calendarSynced: json['calendarSynced'] as bool? ?? false,
       googleCalendarEventId: json['googleCalendarEventId'] as String?,
@@ -43,7 +47,8 @@ Map<String, dynamic> _$AppointmentModelToJson(AppointmentModel instance) =>
     <String, dynamic>{
       'id': instance.id,
       'serviceId': instance.serviceId,
-      'serviceSnapshot': instance.serviceSnapshot,
+      'serviceSnapshot':
+          AppointmentModel._serviceModelToJson(instance.serviceSnapshot),
       'clientFirstName': instance.clientFirstName,
       'clientLastName': instance.clientLastName,
       'clientEmail': instance.clientEmail,
@@ -54,6 +59,11 @@ Map<String, dynamic> _$AppointmentModelToJson(AppointmentModel instance) =>
       'status': _$AppointmentStatusEnumMap[instance.status]!,
       'depositAmountCents': instance.depositAmountCents,
       'stripePaymentIntentId': instance.stripePaymentIntentId,
+      'tipAmountCents': instance.tipAmountCents,
+      'tipPaymentIntentId': instance.tipPaymentIntentId,
+      'postAppointmentTipAmountCents': instance.postAppointmentTipAmountCents,
+      'postAppointmentTipPaymentIntentId':
+          instance.postAppointmentTipPaymentIntentId,
       'depositForfeited': instance.depositForfeited,
       'calendarSynced': instance.calendarSynced,
       'googleCalendarEventId': instance.googleCalendarEventId,

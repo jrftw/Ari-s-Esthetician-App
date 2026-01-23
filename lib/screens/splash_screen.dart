@@ -2,7 +2,7 @@
  * Filename: splash_screen.dart
  * Purpose: Initial splash screen shown while app initializes
  * Author: Kevin Doyle Jr. / Infinitum Imagery LLC
- * Last Modified: 2024-01-XX
+ * Last Modified: 2026-01-22
  * Dependencies: Flutter, go_router, firebase_auth
  * Platform Compatibility: iOS, Android, Web
  */
@@ -39,6 +39,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
   // MARK: - Navigation Logic
   /// Check authentication state and navigate accordingly
+  /// Waits for auth state restoration and checks for session restoration if "keep signed in" is enabled
   Future<void> _checkAuthAndNavigate() async {
     logUI('Starting auth check and navigation', tag: 'SplashScreen');
     logLoading('Waiting 2 seconds before navigation', tag: 'SplashScreen');
@@ -51,13 +52,46 @@ class _SplashScreenState extends State<SplashScreen> {
     }
 
     logAuth('Checking current user', tag: 'SplashScreen');
-    final user = FirebaseAuth.instance.currentUser;
-    logAuth('User found: ${user?.email ?? "null"}', tag: 'SplashScreen');
+    final authService = AuthService();
+    
+    // MARK: - Wait for Auth State Restoration
+    /// Wait for Firebase Auth to restore session from local storage
+    /// This is especially important for web/simulator where refresh can clear auth state temporarily
+    logLoading('Waiting for auth state restoration...', tag: 'SplashScreen');
+    final user = await authService.waitForAuthStateRestoration();
+    logAuth('User found after restoration: ${user?.email ?? "null"}', tag: 'SplashScreen');
+    
+    // MARK: - Session Restoration
+    /// If no user found but "keep signed in" is enabled, try to restore session
+    if (user == null) {
+      logAuth('No user found - checking for session restoration', tag: 'SplashScreen');
+      final restoredUser = await authService.restoreSessionIfEnabled();
+      if (restoredUser != null) {
+        logAuth('Session restored: ${restoredUser.email}', tag: 'SplashScreen');
+        // Use restored user for navigation
+        final isAdmin = await authService.isAdmin();
+        logAuth('Admin status: $isAdmin', tag: 'SplashScreen');
+        
+        // Initialize view mode service
+        final viewModeService = ViewModeService.instance;
+        await viewModeService.initialize(isAdmin: isAdmin);
+        logInfo('View mode service initialized', tag: 'SplashScreen');
+        
+        if (isAdmin) {
+          logRouter('Navigating to /admin', tag: 'SplashScreen');
+          context.go('/admin');
+        } else {
+          logRouter('Navigating to /booking (client)', tag: 'SplashScreen');
+          context.go('/booking');
+        }
+        logComplete('Navigation complete', tag: 'SplashScreen');
+        return;
+      }
+    }
     
     if (user != null) {
       logAuth('User is logged in - checking role', tag: 'SplashScreen');
       // User is logged in, check role and navigate
-      final authService = AuthService();
       logLoading('Checking admin status...', tag: 'SplashScreen');
       final isAdmin = await authService.isAdmin();
       logAuth('Admin status: $isAdmin', tag: 'SplashScreen');

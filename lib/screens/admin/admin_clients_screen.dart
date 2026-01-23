@@ -93,6 +93,13 @@ class _AdminClientsScreenState extends State<AdminClientsScreen> {
           ),
         ],
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showCreateClientDialog(context),
+        backgroundColor: AppColors.sunflowerYellow,
+        foregroundColor: AppColors.darkBrown,
+        tooltip: 'Add New Client',
+        child: const Icon(Icons.person_add),
+      ),
     );
   }
 
@@ -858,6 +865,187 @@ class _AdminClientsScreenState extends State<AdminClientsScreen> {
     }
   }
 
+  // MARK: - Client Create Dialog
+  /// Shows dialog for creating a new client
+  /// Handles form validation and submission
+  Future<void> _showCreateClientDialog(BuildContext context) async {
+    AppLogger().logUI('Creating new client', tag: 'AdminClientsScreen');
+
+    // MARK: - Form Controllers
+    final firstNameController = TextEditingController();
+    final lastNameController = TextEditingController();
+    final emailController = TextEditingController();
+    final phoneController = TextEditingController();
+    final notesController = TextEditingController();
+    List<ClientTag> selectedTags = [];
+
+    // MARK: - Form Key
+    final formKey = GlobalKey<FormState>();
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Add New Client'),
+          content: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // MARK: - First Name
+                  TextFormField(
+                    controller: firstNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'First Name *',
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'First name is required';
+                      }
+                      if (value.length < AppConstants.minNameLength) {
+                        return 'Name must be at least ${AppConstants.minNameLength} characters';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  // MARK: - Last Name
+                  TextFormField(
+                    controller: lastNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Last Name *',
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Last name is required';
+                      }
+                      if (value.length < AppConstants.minNameLength) {
+                        return 'Name must be at least ${AppConstants.minNameLength} characters';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  // MARK: - Email
+                  TextFormField(
+                    controller: emailController,
+                    decoration: const InputDecoration(
+                      labelText: 'Email *',
+                    ),
+                    keyboardType: TextInputType.emailAddress,
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Email is required';
+                      }
+                      if (!value.contains('@')) {
+                        return 'Please enter a valid email';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  // MARK: - Phone
+                  TextFormField(
+                    controller: phoneController,
+                    decoration: const InputDecoration(
+                      labelText: 'Phone *',
+                    ),
+                    keyboardType: TextInputType.phone,
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Phone is required';
+                      }
+                      if (value.length < AppConstants.minPhoneLength) {
+                        return 'Phone must be at least ${AppConstants.minPhoneLength} digits';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  // MARK: - Tags
+                  Text(
+                    'Tags',
+                    style: AppTypography.titleSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: ClientTag.values.map((tag) {
+                      final isSelected = selectedTags.contains(tag);
+                      return FilterChip(
+                        label: Text(_getTagLabel(tag)),
+                        selected: isSelected,
+                        onSelected: (selected) {
+                          setDialogState(() {
+                            if (selected) {
+                              selectedTags.add(tag);
+                            } else {
+                              selectedTags.remove(tag);
+                            }
+                          });
+                        },
+                        selectedColor: AppColors.sunflowerYellow.withOpacity(0.3),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 16),
+                  // MARK: - Internal Notes
+                  TextFormField(
+                    controller: notesController,
+                    decoration: const InputDecoration(
+                      labelText: 'Internal Notes',
+                      hintText: 'Private notes about this client',
+                    ),
+                    maxLines: 4,
+                    maxLength: AppConstants.maxNotesLength,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (formKey.currentState!.validate()) {
+                  await _createClient(
+                    context,
+                    firstName: firstNameController.text.trim(),
+                    lastName: lastNameController.text.trim(),
+                    email: emailController.text.trim(),
+                    phone: phoneController.text.trim(),
+                    tags: selectedTags,
+                    internalNotes: notesController.text.trim().isEmpty
+                        ? null
+                        : notesController.text.trim(),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.sunflowerYellow,
+                foregroundColor: AppColors.darkBrown,
+              ),
+              child: const Text('Create'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    // MARK: - Cleanup Controllers
+    firstNameController.dispose();
+    lastNameController.dispose();
+    emailController.dispose();
+    phoneController.dispose();
+    notesController.dispose();
+  }
+
   // MARK: - Client Edit Dialog
   /// Shows dialog for editing client information
   /// Handles form validation and submission
@@ -1056,6 +1244,98 @@ class _AdminClientsScreenState extends State<AdminClientsScreen> {
 
   // MARK: - Save Client Method
   /// Saves or updates a client in Firestore
+  // MARK: - Create Client
+  /// Creates a new client record
+  Future<void> _createClient(
+    BuildContext context, {
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String phone,
+    required List<ClientTag> tags,
+    String? internalNotes,
+  }) async {
+    try {
+      AppLogger().logLoading('Creating new client: $email', tag: 'AdminClientsScreen');
+
+      // Check if client already exists by email
+      final existingClients = await _firestoreService.searchClients(email);
+      final existingClientList = existingClients.where((c) => c.email.toLowerCase() == email.toLowerCase()).toList();
+
+      if (existingClientList.isNotEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('A client with this email already exists'),
+              backgroundColor: AppColors.errorRed,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Create new client
+      final client = ClientModel.create(
+        firstName: firstName,
+        lastName: lastName,
+        email: email,
+        phone: phone,
+        tags: tags,
+      ).copyWith(
+        internalNotes: internalNotes,
+      );
+
+      // Use getOrCreateClient to ensure proper creation
+      await _firestoreService.getOrCreateClient(
+        firstName: firstName,
+        lastName: lastName,
+        email: email,
+        phone: phone,
+      );
+
+      // Update with tags and notes if provided
+      final createdClient = await _firestoreService.searchClients(email);
+      if (createdClient.isNotEmpty) {
+        final clientToUpdate = createdClient.first;
+        final updatedClient = clientToUpdate.copyWith(
+          tags: tags,
+          internalNotes: internalNotes,
+        );
+        await _firestoreService.updateClient(updatedClient);
+      }
+
+      AppLogger().logSuccess('Client created: $email', tag: 'AdminClientsScreen');
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Client created successfully'),
+            backgroundColor: AppColors.successGreen,
+          ),
+        );
+        Navigator.of(context).pop();
+      }
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to create client',
+        tag: 'AdminClientsScreen',
+        error: e,
+        stackTrace: stackTrace,
+      );
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: AppColors.errorRed,
+          ),
+        );
+      }
+    }
+  }
+
+  // MARK: - Save Client
+  /// Updates an existing client record
   Future<void> _saveClient(
     BuildContext context, {
     required ClientModel client,

@@ -15,11 +15,72 @@ import '../../core/constants/app_typography.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/logging/app_logger.dart';
 import '../../services/view_mode_service.dart';
+import '../../services/notification_service.dart';
+import '../../services/auth_service.dart';
 
 // MARK: - Admin Dashboard Screen
 /// Main admin dashboard showing overview and navigation
-class AdminDashboardScreen extends StatelessWidget {
+class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
+
+  @override
+  State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
+}
+
+// MARK: - Admin Dashboard Screen State
+class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
+  final NotificationService _notificationService = NotificationService();
+  final AuthService _authService = AuthService();
+  int _unreadNotificationsCount = 0;
+  bool _isSuperAdmin = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUnreadCount();
+    _checkSuperAdmin();
+  }
+
+  /// Check if current user is super admin
+  Future<void> _checkSuperAdmin() async {
+    try {
+      final isSuperAdmin = await _authService.isSuperAdmin();
+      if (mounted) {
+        setState(() {
+          _isSuperAdmin = isSuperAdmin;
+        });
+      }
+    } catch (e, stackTrace) {
+      logError(
+        'Failed to check super admin status',
+        tag: 'AdminDashboardScreen',
+        error: e,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
+  /// Load unread notifications count with real-time updates
+  void _loadUnreadCount() {
+    final stream = _notificationService.getUnreadNotificationsCountStream();
+    stream.listen(
+      (count) {
+        if (mounted) {
+          setState(() {
+            _unreadNotificationsCount = count;
+          });
+        }
+      },
+      onError: (error, stackTrace) {
+        logError(
+          'Failed to load unread notifications count',
+          tag: 'AdminDashboardScreen',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,6 +88,44 @@ class AdminDashboardScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Admin Dashboard'),
         actions: [
+          // Notification icon with badge
+          Stack(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.notifications),
+                onPressed: () {
+                  logInfo('Notifications button tapped', tag: 'AdminDashboardScreen');
+                  context.push(AppConstants.routeAdminNotifications);
+                },
+                tooltip: 'Notifications',
+              ),
+              if (_unreadNotificationsCount > 0)
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: AppColors.errorRed,
+                      shape: BoxShape.circle,
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 16,
+                      minHeight: 16,
+                    ),
+                    child: Text(
+                      _unreadNotificationsCount > 99 ? '99+' : '$_unreadNotificationsCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
+          ),
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {
@@ -78,6 +177,23 @@ class AdminDashboardScreen extends StatelessWidget {
           
           _buildNavCard(
             context,
+            title: 'Notifications',
+            subtitle: 'View appointment notifications and history',
+            icon: Icons.notifications,
+            route: AppConstants.routeAdminNotifications,
+            badgeCount: _unreadNotificationsCount > 0 ? _unreadNotificationsCount : null,
+          ),
+          
+          _buildNavCard(
+            context,
+            title: 'Estimated Earnings',
+            subtitle: 'View earnings and statistics',
+            icon: Icons.attach_money,
+            route: AppConstants.routeAdminEarnings,
+          ),
+          
+          _buildNavCard(
+            context,
             title: 'Clients',
             subtitle: 'View client directory',
             icon: Icons.people,
@@ -91,6 +207,25 @@ class AdminDashboardScreen extends StatelessWidget {
             icon: Icons.settings,
             route: AppConstants.routeAdminSettings,
           ),
+          
+          // MARK: - Super Admin Only Features
+          if (_isSuperAdmin) ...[
+            const SizedBox(height: 8),
+            const Divider(),
+            const SizedBox(height: 8),
+            Text(
+              'Super Admin',
+              style: AppTypography.titleLarge,
+            ),
+            const SizedBox(height: 16),
+            _buildNavCard(
+              context,
+              title: 'Software Enhancements',
+              subtitle: 'Report bugs, request features, make suggestions',
+              icon: Icons.bug_report,
+              route: AppConstants.routeAdminSoftwareEnhancements,
+            ),
+          ],
         ],
       ),
     );
@@ -104,11 +239,41 @@ class AdminDashboardScreen extends StatelessWidget {
     required String subtitle,
     required IconData icon,
     required String route,
+    int? badgeCount,
   }) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
-        leading: Icon(icon, color: AppColors.sunflowerYellow, size: 32),
+        leading: Stack(
+          children: [
+            Icon(icon, color: AppColors.sunflowerYellow, size: 32),
+            if (badgeCount != null && badgeCount > 0)
+              Positioned(
+                right: 0,
+                top: 0,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: AppColors.errorRed,
+                    shape: BoxShape.circle,
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 16,
+                    minHeight: 16,
+                  ),
+                  child: Text(
+                    badgeCount > 99 ? '99+' : '$badgeCount',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+          ],
+        ),
         title: Text(title, style: AppTypography.titleMedium),
         subtitle: Text(subtitle, style: AppTypography.bodySmall),
         trailing: const Icon(Icons.chevron_right),

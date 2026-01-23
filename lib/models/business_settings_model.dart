@@ -121,6 +121,12 @@ class BusinessSettingsModel extends Equatable {
   /// Applied when clients cancel appointments within the cancellation window
   final int? cancellationFeeCents;
   
+  /// Whether payments are enabled for bookings
+  /// When false, bookings can be made without payment processing
+  /// Pricing is still shown but payment step is skipped
+  @JsonKey(defaultValue: false)
+  final bool paymentsEnabled;
+  
   /// Timestamp when settings were created
   @JsonKey(fromJson: _timestampFromJson, toJson: _timestampToJson)
   final DateTime createdAt;
@@ -154,6 +160,7 @@ class BusinessSettingsModel extends Equatable {
     this.stripeSecretKey,
     this.minDepositAmountCents,
     this.cancellationFeeCents,
+    this.paymentsEnabled = false,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -247,6 +254,7 @@ class BusinessSettingsModel extends Equatable {
     String? googleCalendarId,
     String? stripePublishableKey,
     String? stripeSecretKey,
+    bool? paymentsEnabled,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -274,6 +282,7 @@ class BusinessSettingsModel extends Equatable {
       stripeSecretKey: stripeSecretKey ?? this.stripeSecretKey,
       minDepositAmountCents: minDepositAmountCents ?? this.minDepositAmountCents,
       cancellationFeeCents: cancellationFeeCents ?? this.cancellationFeeCents,
+      paymentsEnabled: paymentsEnabled ?? this.paymentsEnabled,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
     );
@@ -304,6 +313,7 @@ class BusinessSettingsModel extends Equatable {
         stripePublishableKey,
         minDepositAmountCents,
         cancellationFeeCents,
+        paymentsEnabled,
         createdAt,
         updatedAt,
       ];

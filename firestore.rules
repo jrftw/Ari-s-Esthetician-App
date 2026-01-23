@@ -16,6 +16,13 @@ service cloud.firestore {
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'superAdmin');
     }
     
+    /// Check if user is superAdmin only
+    function isSuperAdmin() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'superAdmin';
+    }
+    
     /// Check if user owns the document
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
@@ -40,18 +47,18 @@ service cloud.firestore {
     }
     
     // MARK: - Appointments Collection
-    /// Appointments - public create, admin read/write, own read, recent read for confirmation
+    /// Appointments - public create, admin read/write, authenticated users can read (for schedule view)
+    /// Note: Personal information filtering must be handled in app code when displaying to clients
     match /appointments/{appointmentId} {
       // Allow public to create appointments (for booking)
       allow create: if true;
       
       // Allow reading appointments if:
-      // 1. User is admin
-      // 2. User is authenticated and email matches
+      // 1. User is admin (full access)
+      // 2. User is authenticated (clients can see schedule - personal info filtered in app)
       // 3. Appointment was created recently (within 1 hour) - for guest confirmation screen
       allow read: if isAdmin() || 
-        (isAuthenticated() && 
-         resource.data.clientEmail == request.auth.token.email) ||
+        isAuthenticated() ||
         (resource.data.createdAt != null &&
          resource.data.createdAt > request.time - duration.value(1, 'h'));
       
@@ -60,9 +67,14 @@ service cloud.firestore {
     }
     
     // MARK: - Clients Collection
-    /// Clients - admin only
+    /// Clients - admin read/write, clients can read their own record
     match /clients/{clientId} {
-      allow read, write: if isAdmin();
+      // Allow clients to read their own client record (matched by email)
+      allow read: if isAdmin() || 
+        (isAuthenticated() && 
+         resource.data.email == request.auth.token.email);
+      // Only admin can write
+      allow write: if isAdmin();
     }
     
     // MARK: - Business Settings Collection
@@ -99,6 +111,25 @@ service cloud.firestore {
     match /serviceCategories/{categoryId} {
       allow read: if true; // Public read for booking
       allow create, update, delete: if isAdmin();
+    }
+    
+    // MARK: - Notifications Collection
+    /// Notifications - admin only read, system write
+    /// Notifications track appointment events for admin visibility
+    match /notifications/{notificationId} {
+      allow read: if isAdmin();
+      // Only allow system to create notifications (via Cloud Functions or backend)
+      // For now, allow authenticated users to create (will be restricted later)
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+    
+    // MARK: - Software Enhancements Collection
+    /// Software enhancements - super admin only
+    /// Super admins can create, read, update, and delete software enhancements
+    /// (bugs, features, suggestions, improvements)
+    match /software_enhancements/{enhancementId} {
+      allow read, write: if isSuperAdmin();
     }
   }
 }

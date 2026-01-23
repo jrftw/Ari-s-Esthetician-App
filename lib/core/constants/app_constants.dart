@@ -90,6 +90,12 @@ class AppConstants {
   
   /// App version collection name
   static const String firestoreAppVersionCollection = "app_version";
+  
+  /// Notifications collection name
+  static const String firestoreNotificationsCollection = "notifications";
+  
+  /// Software enhancements collection name
+  static const String firestoreSoftwareEnhancementsCollection = "software_enhancements";
 
   // MARK: - Storage Paths
   /// Logo storage path
@@ -111,6 +117,9 @@ class AppConstants {
   /// Client confirmation route
   static const String routeClientConfirmation = "/confirmation";
   
+  /// Client appointments route (view upcoming and past bookings)
+  static const String routeClientAppointments = "/appointments";
+  
   /// Admin dashboard route
   static const String routeAdminDashboard = "/admin";
   
@@ -128,6 +137,15 @@ class AppConstants {
   
   /// Admin categories route
   static const String routeAdminCategories = "/admin/categories";
+  
+  /// Admin earnings route
+  static const String routeAdminEarnings = "/admin/earnings";
+  
+  /// Admin notifications route
+  static const String routeAdminNotifications = "/admin/notifications";
+  
+  /// Admin software enhancements route
+  static const String routeAdminSoftwareEnhancements = "/admin/software-enhancements";
   
   /// General settings route (accessible to all users)
   static const String routeSettings = "/settings";
