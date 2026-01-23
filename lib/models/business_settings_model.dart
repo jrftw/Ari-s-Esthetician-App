@@ -86,7 +86,11 @@ class BusinessSettingsModel extends Equatable {
   final String? twitterUrl;
   
   /// Weekly business hours
-  @JsonKey(defaultValue: [])
+  @JsonKey(
+    defaultValue: [],
+    toJson: _weeklyHoursToJson,
+    fromJson: _weeklyHoursFromJson,
+  )
   final List<BusinessHoursModel> weeklyHours;
   
   /// Cancellation window in hours
@@ -186,6 +190,30 @@ class BusinessSettingsModel extends Equatable {
     required String businessPhone,
   }) {
     final now = DateTime.now();
+    
+    // MARK: - Default Working Hours
+    /// Default working hours based on business schedule:
+    /// Sunday: Closed
+    /// Monday-Thursday: 8:00 AM - 5:30 PM
+    /// Friday: 9:00 AM - 3:30 PM
+    /// Saturday: Closed
+    final defaultWeeklyHours = [
+      // Sunday (0) - Closed
+      BusinessHoursModel(dayOfWeek: 0, isOpen: false, timeSlots: []),
+      // Monday (1) - 8:00 AM - 5:30 PM
+      BusinessHoursModel(dayOfWeek: 1, isOpen: true, timeSlots: ['08:00', '17:30']),
+      // Tuesday (2) - 8:00 AM - 5:30 PM
+      BusinessHoursModel(dayOfWeek: 2, isOpen: true, timeSlots: ['08:00', '17:30']),
+      // Wednesday (3) - 8:00 AM - 5:30 PM
+      BusinessHoursModel(dayOfWeek: 3, isOpen: true, timeSlots: ['08:00', '17:30']),
+      // Thursday (4) - 8:00 AM - 5:30 PM
+      BusinessHoursModel(dayOfWeek: 4, isOpen: true, timeSlots: ['08:00', '17:30']),
+      // Friday (5) - 9:00 AM - 3:30 PM
+      BusinessHoursModel(dayOfWeek: 5, isOpen: true, timeSlots: ['09:00', '15:30']),
+      // Saturday (6) - Closed
+      BusinessHoursModel(dayOfWeek: 6, isOpen: false, timeSlots: []),
+    ];
+    
     return BusinessSettingsModel(
       id: 'main',
       businessName: businessName,
@@ -196,7 +224,7 @@ class BusinessSettingsModel extends Equatable {
       noShowPolicyText: 'Deposits are non-refundable for no-shows. Please cancel at least 24 hours in advance.',
       bookingPolicyText: 'A non-refundable deposit is required to confirm your appointment.',
       timezone: 'America/New_York',
-      weeklyHours: [],
+      weeklyHours: defaultWeeklyHours,
       createdAt: now,
       updatedAt: now,
     );
@@ -210,6 +238,18 @@ class BusinessSettingsModel extends Equatable {
   Map<String, dynamic> toFirestore() {
     final json = toJson();
     json.remove('id'); // Firestore handles ID separately
+    
+    // MARK: - Serialize Nested Objects
+    // Ensure weeklyHours are properly serialized as maps
+    if (json.containsKey('weeklyHours') && json['weeklyHours'] is List) {
+      json['weeklyHours'] = (json['weeklyHours'] as List).map((item) {
+        if (item is BusinessHoursModel) {
+          return item.toJson();
+        }
+        return item; // Already a map
+      }).toList();
+    }
+    
     return json;
   }
 
@@ -332,6 +372,19 @@ class BusinessSettingsModel extends Equatable {
 
   static dynamic _timestampToJson(DateTime dateTime) {
     return Timestamp.fromDate(dateTime);
+  }
+
+  // MARK: - Weekly Hours Converters
+  /// Convert list of BusinessHoursModel to JSON list
+  static List<Map<String, dynamic>> _weeklyHoursToJson(List<BusinessHoursModel> hours) {
+    return hours.map((h) => h.toJson()).toList();
+  }
+
+  /// Convert JSON list to list of BusinessHoursModel
+  static List<BusinessHoursModel> _weeklyHoursFromJson(List<dynamic> json) {
+    return json
+        .map((e) => BusinessHoursModel.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 }
 

@@ -20,8 +20,10 @@ NotificationModel _$NotificationModelFromJson(Map<String, dynamic> json) =>
       previousStatus: json['previousStatus'] as String?,
       newStatus: json['newStatus'] as String?,
       isRead: json['isRead'] as bool? ?? false,
+      isArchived: json['isArchived'] as bool? ?? false,
       createdAt: NotificationModel._timestampFromJson(json['createdAt']),
       readAt: NotificationModel._timestampFromJson(json['readAt']),
+      archivedAt: NotificationModel._timestampFromJson(json['archivedAt']),
     );
 
 Map<String, dynamic> _$NotificationModelToJson(NotificationModel instance) =>
@@ -38,8 +40,10 @@ Map<String, dynamic> _$NotificationModelToJson(NotificationModel instance) =>
       'previousStatus': instance.previousStatus,
       'newStatus': instance.newStatus,
       'isRead': instance.isRead,
+      'isArchived': instance.isArchived,
       'createdAt': NotificationModel._timestampToJson(instance.createdAt),
       'readAt': NotificationModel._timestampToJson(instance.readAt),
+      'archivedAt': NotificationModel._timestampToJson(instance.archivedAt),
     };
 
 const _$NotificationTypeEnumMap = {

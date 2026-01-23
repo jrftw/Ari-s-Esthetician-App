@@ -56,36 +56,30 @@ class _SplashScreenState extends State<SplashScreen> {
     
     // MARK: - Wait for Auth State Restoration
     /// Wait for Firebase Auth to restore session from local storage
+    /// Firebase Auth persists sessions automatically, so we always check for existing sessions
     /// This is especially important for web/simulator where refresh can clear auth state temporarily
+    /// and for hot reload during development
     logLoading('Waiting for auth state restoration...', tag: 'SplashScreen');
-    final user = await authService.waitForAuthStateRestoration();
+    
+    // Always check for existing Firebase Auth session (Firebase persists automatically)
+    User? user = await authService.checkExistingSession();
+    
+    // If no user found, also try the waitForAuthStateRestoration method
+    if (user == null) {
+      user = await authService.waitForAuthStateRestoration();
+    }
+    
     logAuth('User found after restoration: ${user?.email ?? "null"}', tag: 'SplashScreen');
     
     // MARK: - Session Restoration
-    /// If no user found but "keep signed in" is enabled, try to restore session
+    /// If no user found, try to restore session (Firebase Auth persists automatically)
+    /// The keepSignedIn preference is mainly for UI, but we still check it
     if (user == null) {
       logAuth('No user found - checking for session restoration', tag: 'SplashScreen');
       final restoredUser = await authService.restoreSessionIfEnabled();
       if (restoredUser != null) {
+        user = restoredUser;
         logAuth('Session restored: ${restoredUser.email}', tag: 'SplashScreen');
-        // Use restored user for navigation
-        final isAdmin = await authService.isAdmin();
-        logAuth('Admin status: $isAdmin', tag: 'SplashScreen');
-        
-        // Initialize view mode service
-        final viewModeService = ViewModeService.instance;
-        await viewModeService.initialize(isAdmin: isAdmin);
-        logInfo('View mode service initialized', tag: 'SplashScreen');
-        
-        if (isAdmin) {
-          logRouter('Navigating to /admin', tag: 'SplashScreen');
-          context.go('/admin');
-        } else {
-          logRouter('Navigating to /booking (client)', tag: 'SplashScreen');
-          context.go('/booking');
-        }
-        logComplete('Navigation complete', tag: 'SplashScreen');
-        return;
       }
     }
     

@@ -66,6 +66,9 @@ class NotificationModel extends Equatable {
   /// Whether the notification has been read by an admin
   final bool isRead;
   
+  /// Whether the notification has been archived
+  final bool isArchived;
+  
   /// Timestamp when the notification was created
   @JsonKey(fromJson: _timestampFromJson, toJson: _timestampToJson)
   final DateTime createdAt;
@@ -73,6 +76,10 @@ class NotificationModel extends Equatable {
   /// Timestamp when the notification was read (if read)
   @JsonKey(fromJson: _timestampFromJson, toJson: _timestampToJson)
   final DateTime? readAt;
+  
+  /// Timestamp when the notification was archived (if archived)
+  @JsonKey(fromJson: _timestampFromJson, toJson: _timestampToJson)
+  final DateTime? archivedAt;
 
   // MARK: - Constructor
   const NotificationModel({
@@ -87,8 +94,10 @@ class NotificationModel extends Equatable {
     this.previousStatus,
     this.newStatus,
     this.isRead = false,
+    this.isArchived = false,
     required this.createdAt,
     this.readAt,
+    this.archivedAt,
   });
 
   // MARK: - Factory Constructors
@@ -123,6 +132,7 @@ class NotificationModel extends Equatable {
       clientEmail: clientEmail,
       appointmentStartTime: appointmentStartTime,
       isRead: false,
+      isArchived: false,
       createdAt: now,
     );
   }
@@ -145,6 +155,7 @@ class NotificationModel extends Equatable {
       clientEmail: clientEmail,
       appointmentStartTime: appointmentStartTime,
       isRead: false,
+      isArchived: false,
       createdAt: now,
     );
   }
@@ -167,6 +178,7 @@ class NotificationModel extends Equatable {
       clientEmail: clientEmail,
       appointmentStartTime: appointmentStartTime,
       isRead: false,
+      isArchived: false,
       createdAt: now,
     );
   }
@@ -193,6 +205,7 @@ class NotificationModel extends Equatable {
       previousStatus: previousStatus,
       newStatus: newStatus,
       isRead: false,
+      isArchived: false,
       createdAt: now,
     );
   }
@@ -222,8 +235,10 @@ class NotificationModel extends Equatable {
     String? previousStatus,
     String? newStatus,
     bool? isRead,
+    bool? isArchived,
     DateTime? createdAt,
     DateTime? readAt,
+    DateTime? archivedAt,
   }) {
     return NotificationModel(
       id: id ?? this.id,
@@ -237,8 +252,10 @@ class NotificationModel extends Equatable {
       previousStatus: previousStatus ?? this.previousStatus,
       newStatus: newStatus ?? this.newStatus,
       isRead: isRead ?? this.isRead,
+      isArchived: isArchived ?? this.isArchived,
       createdAt: createdAt ?? this.createdAt,
       readAt: readAt ?? this.readAt,
+      archivedAt: archivedAt ?? this.archivedAt,
     );
   }
 
@@ -247,6 +264,22 @@ class NotificationModel extends Equatable {
     return copyWith(
       isRead: true,
       readAt: DateTime.now(),
+    );
+  }
+
+  /// Mark notification as archived
+  NotificationModel markAsArchived() {
+    return copyWith(
+      isArchived: true,
+      archivedAt: DateTime.now(),
+    );
+  }
+
+  /// Mark notification as unarchived
+  NotificationModel markAsUnarchived() {
+    return copyWith(
+      isArchived: false,
+      archivedAt: null,
     );
   }
 
@@ -264,8 +297,10 @@ class NotificationModel extends Equatable {
         previousStatus,
         newStatus,
         isRead,
+        isArchived,
         createdAt,
         readAt,
+        archivedAt,
       ];
 
   // MARK: - Timestamp Helpers

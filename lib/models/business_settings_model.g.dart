@@ -38,11 +38,10 @@ BusinessSettingsModel _$BusinessSettingsModelFromJson(
       facebookUrl: json['facebookUrl'] as String?,
       instagramUrl: json['instagramUrl'] as String?,
       twitterUrl: json['twitterUrl'] as String?,
-      weeklyHours: (json['weeklyHours'] as List<dynamic>?)
-              ?.map(
-                  (e) => BusinessHoursModel.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          [],
+      weeklyHours: json['weeklyHours'] == null
+          ? []
+          : BusinessSettingsModel._weeklyHoursFromJson(
+              json['weeklyHours'] as List),
       cancellationWindowHours:
           (json['cancellationWindowHours'] as num?)?.toInt() ?? 24,
       latePolicyText: json['latePolicyText'] as String? ?? '',
@@ -74,7 +73,8 @@ Map<String, dynamic> _$BusinessSettingsModelToJson(
       'facebookUrl': instance.facebookUrl,
       'instagramUrl': instance.instagramUrl,
       'twitterUrl': instance.twitterUrl,
-      'weeklyHours': instance.weeklyHours,
+      'weeklyHours':
+          BusinessSettingsModel._weeklyHoursToJson(instance.weeklyHours),
       'cancellationWindowHours': instance.cancellationWindowHours,
       'latePolicyText': instance.latePolicyText,
       'noShowPolicyText': instance.noShowPolicyText,

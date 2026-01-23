@@ -8,9 +8,17 @@
  */
 
 // MARK: - Imports
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+// Web-specific imports (conditional)
+import 'dart:html'
+    if (dart.library.io) 'html_stub.dart' as html;
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/constants/app_constants.dart';
@@ -18,6 +26,46 @@ import '../../core/logging/app_logger.dart';
 import '../../models/service_model.dart';
 import '../../models/service_category_model.dart';
 import '../../services/firestore_service.dart';
+
+// MARK: - Service Sort Option Enum
+/// Enum for different sorting options for services
+enum ServiceSortOption {
+  /// Sort alphabetically by name (A to Z)
+  nameAscending,
+  
+  /// Sort by price (lowest to highest)
+  priceAscending,
+  
+  /// Sort by price (highest to lowest)
+  priceDescending,
+  
+  /// Sort by tier (Higher, Mid, Lower)
+  tierAscending,
+  
+  /// Sort by tier (Lower, Mid, Higher)
+  tierDescending,
+  
+  /// Default sort by display order
+  displayOrder;
+
+  /// Get display name for the sort option
+  String get displayName {
+    switch (this) {
+      case ServiceSortOption.nameAscending:
+        return 'Name (A-Z)';
+      case ServiceSortOption.priceAscending:
+        return 'Price (Low to High)';
+      case ServiceSortOption.priceDescending:
+        return 'Price (High to Low)';
+      case ServiceSortOption.tierAscending:
+        return 'Tier (Higher to Lower)';
+      case ServiceSortOption.tierDescending:
+        return 'Tier (Lower to Higher)';
+      case ServiceSortOption.displayOrder:
+        return 'Display Order';
+    }
+  }
+}
 
 // MARK: - Admin Services Screen
 /// Screen for managing services offered by the business
@@ -35,6 +83,10 @@ class AdminServicesScreen extends StatefulWidget {
 class _AdminServicesScreenState extends State<AdminServicesScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  
+  // MARK: - Sorting State
+  /// Current sorting option for services list
+  ServiceSortOption _currentSortOption = ServiceSortOption.displayOrder;
 
   @override
   void initState() {
@@ -51,6 +103,39 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
         backgroundColor: AppColors.sunflowerYellow,
         foregroundColor: AppColors.darkBrown,
         actions: [
+          // MARK: - PDF Export Button
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf),
+            onPressed: () => _generateServicesPDF(context),
+            tooltip: 'Export to PDF',
+          ),
+          // MARK: - Sort Button
+          PopupMenuButton<ServiceSortOption>(
+            icon: const Icon(Icons.sort),
+            tooltip: 'Sort Services',
+            onSelected: (ServiceSortOption option) {
+              setState(() {
+                _currentSortOption = option;
+                AppLogger().logInfo('Sort option changed: ${option.displayName}', tag: 'AdminServicesScreen');
+              });
+            },
+            itemBuilder: (BuildContext context) => ServiceSortOption.values.map((option) {
+              return PopupMenuItem<ServiceSortOption>(
+                value: option,
+                child: Row(
+                  children: [
+                    if (_currentSortOption == option)
+                      const Icon(Icons.check, size: 20, color: AppColors.sunflowerYellow)
+                    else
+                      const SizedBox(width: 20),
+                    const SizedBox(width: 8),
+                    Text(option.displayName),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+          // MARK: - Settings Button
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {
@@ -162,13 +247,16 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
             .map((doc) => ServiceModel.fromFirestore(doc))
             .toList();
 
-        AppLogger().logInfo('Displaying ${services.length} services', tag: 'AdminServicesScreen');
+        // MARK: - Apply Sorting
+        final sortedServices = _sortServices(services, _currentSortOption);
+
+        AppLogger().logInfo('Displaying ${sortedServices.length} services (sorted by ${_currentSortOption.displayName})', tag: 'AdminServicesScreen');
 
         return ListView.builder(
           padding: const EdgeInsets.all(16),
-          itemCount: services.length,
+          itemCount: sortedServices.length,
           itemBuilder: (context, index) {
-            return _buildServiceCard(services[index]);
+            return _buildServiceCard(sortedServices[index]);
           },
         );
       },
@@ -1237,6 +1325,633 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
             backgroundColor: AppColors.errorRed,
           ),
         );
+      }
+    }
+  }
+
+  // MARK: - Sort Services Method
+  /// Sorts services based on the selected sort option
+  /// Returns a new sorted list without modifying the original
+  List<ServiceModel> _sortServices(List<ServiceModel> services, ServiceSortOption sortOption) {
+    final sortedList = List<ServiceModel>.from(services);
+    
+    switch (sortOption) {
+      case ServiceSortOption.nameAscending:
+        sortedList.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        break;
+      case ServiceSortOption.priceAscending:
+        sortedList.sort((a, b) => a.priceCents.compareTo(b.priceCents));
+        break;
+      case ServiceSortOption.priceDescending:
+        sortedList.sort((a, b) => b.priceCents.compareTo(a.priceCents));
+        break;
+      case ServiceSortOption.tierAscending:
+        sortedList.sort((a, b) {
+          // Higher = 0, Mid = 1, Lower = 2
+          final aTierValue = a.packageTier == ServicePackageTier.higher ? 0 : 
+                           (a.packageTier == ServicePackageTier.mid ? 1 : 2);
+          final bTierValue = b.packageTier == ServicePackageTier.higher ? 0 : 
+                           (b.packageTier == ServicePackageTier.mid ? 1 : 2);
+          return aTierValue.compareTo(bTierValue);
+        });
+        break;
+      case ServiceSortOption.tierDescending:
+        sortedList.sort((a, b) {
+          // Higher = 0, Mid = 1, Lower = 2
+          final aTierValue = a.packageTier == ServicePackageTier.higher ? 0 : 
+                           (a.packageTier == ServicePackageTier.mid ? 1 : 2);
+          final bTierValue = b.packageTier == ServicePackageTier.higher ? 0 : 
+                           (b.packageTier == ServicePackageTier.mid ? 1 : 2);
+          return bTierValue.compareTo(aTierValue);
+        });
+        break;
+      case ServiceSortOption.displayOrder:
+        sortedList.sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
+        break;
+    }
+    
+    return sortedList;
+  }
+
+  // MARK: - Generate Services PDF Method
+  /// Generates a beautiful PDF document with all service details
+  /// Includes service name, description, duration, price, package tier, and category
+  /// Shows preview on both web and mobile platforms before allowing print/share/save
+  Future<void> _generateServicesPDF(BuildContext context) async {
+    // Show loading indicator
+    if (!context.mounted) return;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Generating PDF...'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    try {
+      AppLogger().logLoading('Generating services PDF', tag: 'AdminServicesScreen');
+      
+      // Fetch all services
+      final services = await _firestoreService.getAllServices();
+      
+      if (services.isEmpty) {
+        if (context.mounted) {
+          Navigator.of(context).pop(); // Close loading dialog
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No services to export'),
+              backgroundColor: AppColors.errorRed,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Fetch categories for display
+      final categories = await _firestoreService.getActiveCategories();
+      final categoryMap = {for (var cat in categories) cat.id: cat.name};
+
+      // Create PDF document
+      final pdf = pw.Document();
+      
+      // Define colors matching app theme
+      final primaryColor = PdfColor.fromHex('#F4C430'); // Sunflower Yellow
+      final darkColor = PdfColor.fromHex('#5D4037'); // Dark Brown
+      final lightColor = PdfColor.fromHex('#FFF8E7'); // Soft Cream
+      final textColor = PdfColor.fromHex('#3E2723'); // Dark text
+      final secondaryTextColor = PdfColor.fromHex('#757575'); // Secondary text
+
+      // Add page
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(40),
+          build: (pw.Context context) {
+            return [
+              // MARK: - PDF Header
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        'Services Catalog',
+                        style: pw.TextStyle(
+                          fontSize: 28,
+                          fontWeight: pw.FontWeight.bold,
+                          color: darkColor,
+                        ),
+                      ),
+                      pw.SizedBox(height: 4),
+                      pw.Text(
+                        'Generated: ${DateTime.now().toString().split(' ')[0]}',
+                        style: pw.TextStyle(
+                          fontSize: 10,
+                          color: secondaryTextColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                  pw.Container(
+                    width: 60,
+                    height: 60,
+                    decoration: pw.BoxDecoration(
+                      color: primaryColor,
+                      shape: pw.BoxShape.circle,
+                    ),
+                    child: pw.Center(
+                      child: pw.Text(
+                        'A',
+                        style: pw.TextStyle(
+                          fontSize: 32,
+                          fontWeight: pw.FontWeight.bold,
+                          color: darkColor,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 30),
+
+              // MARK: - Services List
+              ...services.map((service) {
+                
+                // Get category name
+                final categoryName = service.categoryId != null && 
+                                    categoryMap.containsKey(service.categoryId)
+                    ? categoryMap[service.categoryId]!
+                    : (service.categoryNameSnapshot ?? 'Uncategorized');
+
+                return pw.Container(
+                  margin: const pw.EdgeInsets.only(bottom: 20),
+                  padding: const pw.EdgeInsets.all(16),
+                  decoration: pw.BoxDecoration(
+                    color: lightColor,
+                    borderRadius: pw.BorderRadius.circular(8),
+                    border: pw.Border.all(color: primaryColor, width: 1),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      // Service Name and Status
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Expanded(
+                            child: pw.Text(
+                              service.name,
+                              style: pw.TextStyle(
+                                fontSize: 18,
+                                fontWeight: pw.FontWeight.bold,
+                                color: darkColor,
+                              ),
+                            ),
+                          ),
+                          pw.Container(
+                            padding: const pw.EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: pw.BoxDecoration(
+                              color: service.isActive 
+                                  ? PdfColor(0.298, 0.686, 0.314, 0.2) // #4CAF50 with 0.2 opacity
+                                  : PdfColor(0.620, 0.620, 0.620, 0.2), // #9E9E9E with 0.2 opacity
+                              borderRadius: pw.BorderRadius.circular(12),
+                            ),
+                            child: pw.Text(
+                              service.isActive ? 'Active' : 'Inactive',
+                              style: pw.TextStyle(
+                                fontSize: 10,
+                                fontWeight: pw.FontWeight.bold,
+                                color: service.isActive 
+                                    ? PdfColor.fromHex('#4CAF50')
+                                    : PdfColor.fromHex('#9E9E9E'),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      pw.SizedBox(height: 8),
+                      
+                      // Description
+                      pw.Text(
+                        service.description,
+                        style: pw.TextStyle(
+                          fontSize: 12,
+                          color: textColor,
+                        ),
+                      ),
+                      pw.SizedBox(height: 12),
+                      
+                      // Details Row
+                      pw.Row(
+                        children: [
+                          // Duration
+                          pw.Expanded(
+                            child: pw.Container(
+                              padding: const pw.EdgeInsets.all(8),
+                              decoration: pw.BoxDecoration(
+                                color: PdfColors.white,
+                                borderRadius: pw.BorderRadius.circular(6),
+                              ),
+                              child: pw.Column(
+                                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                                children: [
+                                  pw.Text(
+                                    'Duration',
+                                    style: pw.TextStyle(
+                                      fontSize: 9,
+                                      color: secondaryTextColor,
+                                    ),
+                                  ),
+                                  pw.SizedBox(height: 2),
+                                  pw.Text(
+                                    '${service.durationMinutes} min',
+                                    style: pw.TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: pw.FontWeight.bold,
+                                      color: textColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          pw.SizedBox(width: 8),
+                          
+                          // Price
+                          pw.Expanded(
+                            child: pw.Container(
+                              padding: const pw.EdgeInsets.all(8),
+                              decoration: pw.BoxDecoration(
+                                color: PdfColors.white,
+                                borderRadius: pw.BorderRadius.circular(6),
+                              ),
+                              child: pw.Column(
+                                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                                children: [
+                                  pw.Text(
+                                    'Price',
+                                    style: pw.TextStyle(
+                                      fontSize: 9,
+                                      color: secondaryTextColor,
+                                    ),
+                                  ),
+                                  pw.SizedBox(height: 2),
+                                  pw.Text(
+                                    service.formattedPrice,
+                                    style: pw.TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: pw.FontWeight.bold,
+                                      color: textColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          pw.SizedBox(width: 8),
+                          
+                          // Deposit
+                          pw.Expanded(
+                            child: pw.Container(
+                              padding: const pw.EdgeInsets.all(8),
+                              decoration: pw.BoxDecoration(
+                                color: PdfColors.white,
+                                borderRadius: pw.BorderRadius.circular(6),
+                              ),
+                              child: pw.Column(
+                                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                                children: [
+                                  pw.Text(
+                                    'Deposit',
+                                    style: pw.TextStyle(
+                                      fontSize: 9,
+                                      color: secondaryTextColor,
+                                    ),
+                                  ),
+                                  pw.SizedBox(height: 2),
+                                  pw.Text(
+                                    service.formattedDeposit,
+                                    style: pw.TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: pw.FontWeight.bold,
+                                      color: textColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      pw.SizedBox(height: 12),
+                      
+                      // Package Tier and Category
+                      pw.Row(
+                        children: [
+                          // Package Tier
+                          pw.Container(
+                            padding: const pw.EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            decoration: pw.BoxDecoration(
+                              color: PdfColor(0.957, 0.769, 0.188, 0.1), // primaryColor with 0.1 opacity
+                              borderRadius: pw.BorderRadius.circular(12),
+                              border: pw.Border.all(
+                                color: PdfColor(0.957, 0.769, 0.188, 0.3), // primaryColor with 0.3 opacity
+                                width: 1,
+                              ),
+                            ),
+                            child: pw.Row(
+                              mainAxisSize: pw.MainAxisSize.min,
+                              children: [
+                                pw.Text(
+                                  '★ ',
+                                  style: pw.TextStyle(
+                                    fontSize: 12,
+                                    color: primaryColor,
+                                  ),
+                                ),
+                                pw.Text(
+                                  '${service.packageTier.displayName} Tier',
+                                  style: pw.TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: pw.FontWeight.bold,
+                                    color: primaryColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          pw.SizedBox(width: 12),
+                          
+                          // Category
+                          pw.Container(
+                            padding: const pw.EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            decoration: pw.BoxDecoration(
+                              color: PdfColor(0.365, 0.251, 0.216, 0.1), // darkColor with 0.1 opacity
+                              borderRadius: pw.BorderRadius.circular(12),
+                            ),
+                            child: pw.Text(
+                              'Category: $categoryName',
+                              style: pw.TextStyle(
+                                fontSize: 10,
+                                color: darkColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ];
+          },
+        ),
+      );
+
+      // MARK: - Platform-Specific PDF Preview and Export
+      final pdfBytes = await pdf.save();
+      
+      // Close loading dialog before showing preview
+      if (context.mounted) {
+        Navigator.of(context).pop();
+      }
+      
+      // MARK: - Web Platform Handler
+      /// For web, use direct download or browser print
+      if (kIsWeb) {
+        await _handleWebPDF(context, pdfBytes);
+      } else {
+        // MARK: - Mobile Platform Handler
+        /// For mobile, use printing package with preview
+        await _handleMobilePDF(context, pdfBytes);
+      }
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to generate services PDF',
+        tag: 'AdminServicesScreen',
+        error: e,
+        stackTrace: stackTrace,
+      );
+
+      // Close loading dialog if still open
+      if (context.mounted) {
+        Navigator.of(context).pop(); // Close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error generating PDF: ${e.toString()}'),
+            backgroundColor: AppColors.errorRed,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
+  }
+
+    // MARK: - Web PDF Handler
+  /// Handles PDF preview and download for web platform
+  /// Shows a dialog with options to preview, download, or print
+  Future<void> _handleWebPDF(BuildContext context, Uint8List pdfBytes) async {
+    // Only execute on web platform
+    if (!kIsWeb) return;
+    
+    try {
+      // Show dialog with options
+      final action = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Export Services PDF'),
+          content: const Text(
+            'Choose an action:\n\n'
+            '• Preview: View PDF in browser\n'
+            '• Download: Save PDF to device\n'
+            '• Print: Print PDF directly',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('preview'),
+              child: const Text('Preview'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('download'),
+              child: const Text('Download'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('print'),
+              child: const Text('Print'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      );
+
+      if (action == null) return;
+
+      // Create blob URL for preview/download (web only)
+      final blob = html.Blob([pdfBytes]);
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      final anchor = html.AnchorElement(href: url)
+        ..target = '_blank'
+        ..download = 'services_catalog_${DateTime.now().toString().split(' ')[0]}.pdf';
+
+      switch (action) {
+        case 'preview':
+          // Open in new tab for preview
+          anchor.target = '_blank';
+          anchor.download = null; // Remove download attribute for preview
+          anchor.click();
+          html.Url.revokeObjectUrl(url);
+          AppLogger().logSuccess('PDF preview opened in browser', tag: 'AdminServicesScreen');
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('PDF opened in new tab for preview'),
+                backgroundColor: AppColors.successGreen,
+              ),
+            );
+          }
+          break;
+
+        case 'download':
+          // Trigger download
+          anchor.click();
+          html.Url.revokeObjectUrl(url);
+          AppLogger().logSuccess('PDF download started', tag: 'AdminServicesScreen');
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('PDF download started'),
+                backgroundColor: AppColors.successGreen,
+              ),
+            );
+          }
+          break;
+
+        case 'print':
+          // Create an iframe to load PDF and trigger print
+          final iframe = html.IFrameElement()
+            ..src = url
+            ..style.display = 'none';
+          html.document.body?.append(iframe);
+          
+          // Wait for PDF to load, then trigger print
+          iframe.onLoad.listen((_) {
+            Future.delayed(const Duration(milliseconds: 300), () {
+              html.window.print();
+              // Clean up
+              iframe.remove();
+              html.Url.revokeObjectUrl(url);
+            });
+          });
+          
+          AppLogger().logSuccess('PDF print dialog opened', tag: 'AdminServicesScreen');
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Print dialog will open shortly'),
+                backgroundColor: AppColors.successGreen,
+              ),
+            );
+          }
+          break;
+      }
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to handle web PDF',
+        tag: 'AdminServicesScreen',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: AppColors.errorRed,
+          ),
+        );
+      }
+    }
+  }
+
+  // MARK: - Mobile PDF Handler
+  /// Handles PDF preview and sharing for mobile platforms
+  /// Uses printing package to show preview with share/save/print options
+  Future<void> _handleMobilePDF(BuildContext context, Uint8List pdfBytes) async {
+    try {
+      // Use printing package for mobile - it handles preview automatically
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdfBytes,
+        format: PdfPageFormat.a4,
+      );
+
+      AppLogger().logSuccess(
+        'Services PDF preview shown on mobile',
+        tag: 'AdminServicesScreen',
+      );
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('PDF ready! Use the preview to share, save, or print.'),
+            backgroundColor: AppColors.successGreen,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to handle mobile PDF',
+        tag: 'AdminServicesScreen',
+        error: e,
+        stackTrace: stackTrace,
+      );
+
+      // Fallback: Try sharePdf if layoutPdf fails
+      try {
+        await Printing.sharePdf(
+          bytes: pdfBytes,
+          filename: 'services_catalog_${DateTime.now().toString().split(' ')[0]}.pdf',
+        );
+        AppLogger().logSuccess('PDF shared successfully (fallback method)', tag: 'AdminServicesScreen');
+      } catch (shareError) {
+        AppLogger().logError(
+          'Both PDF methods failed',
+          tag: 'AdminServicesScreen',
+          error: shareError,
+        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error: ${e.toString()}'),
+              backgroundColor: AppColors.errorRed,
+            ),
+          );
+        }
       }
     }
   }

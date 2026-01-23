@@ -202,6 +202,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           
           _buildNavCard(
             context,
+            title: 'Time Off',
+            subtitle: 'Manage breaks, vacations, and unavailable days',
+            icon: Icons.event_busy,
+            route: AppConstants.routeAdminTimeOff,
+          ),
+          
+          _buildNavCard(
+            context,
             title: 'Settings',
             subtitle: 'Business settings and branding',
             icon: Icons.settings,

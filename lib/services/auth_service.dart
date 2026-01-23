@@ -243,19 +243,26 @@ class AuthService {
 
   /// Restore session if "keep signed in" is enabled
   /// Checks preferences and waits for Firebase Auth to restore session
+  /// Note: Firebase Auth persists sessions automatically, so this method primarily
+  /// waits for Firebase to restore the session from local storage
   Future<User?> restoreSessionIfEnabled() async {
     try {
+      // Firebase Auth persists sessions automatically, so we always check for existing sessions
+      // The keepSignedIn preference is mainly for UI purposes (showing checkbox)
+      // But we still respect it if the user explicitly disabled it
       final preferencesService = PreferencesService.instance;
       final keepSignedIn = await preferencesService.getKeepSignedIn();
       
-      if (!keepSignedIn) {
-        AppLogger().logInfo('Keep signed in is disabled - skipping session restoration', tag: 'AuthService');
+      // Always wait for Firebase Auth to restore session (it persists automatically)
+      // Only skip if user explicitly disabled keep signed in AND no current user exists
+      if (!keepSignedIn && _auth.currentUser == null) {
+        AppLogger().logInfo('Keep signed in is disabled and no current user - skipping session restoration', tag: 'AuthService');
         return null;
       }
 
-      AppLogger().logInfo('Keep signed in is enabled - waiting for session restoration', tag: 'AuthService');
+      AppLogger().logInfo('Checking for Firebase Auth session restoration (Firebase persists automatically)', tag: 'AuthService');
       
-      // Wait for auth state to be restored
+      // Wait for auth state to be restored (Firebase handles persistence automatically)
       final user = await waitForAuthStateRestoration();
       
       if (user != null) {
@@ -273,6 +280,35 @@ class AuthService {
         stackTrace: stackTrace,
       );
       return null;
+    }
+  }
+  
+  /// Check for existing Firebase Auth session
+  /// Firebase Auth persists sessions automatically, so this checks for any existing session
+  /// This is useful for hot reload and app restarts
+  Future<User?> checkExistingSession() async {
+    try {
+      AppLogger().logInfo('Checking for existing Firebase Auth session', tag: 'AuthService');
+      
+      // Firebase Auth persists sessions automatically
+      // Wait for auth state to be restored (important for hot reload)
+      final user = await waitForAuthStateRestoration();
+      
+      if (user != null) {
+        AppLogger().logInfo('Existing session found: ${user.email}', tag: 'AuthService');
+      } else {
+        AppLogger().logInfo('No existing session found', tag: 'AuthService');
+      }
+      
+      return user;
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to check existing session',
+        tag: 'AuthService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      return _auth.currentUser;
     }
   }
 

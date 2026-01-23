@@ -41,6 +41,15 @@ AppointmentModel _$AppointmentModelFromJson(Map<String, dynamic> json) =>
       dayOfReminderEmailSentAt:
           AppointmentModel._timestampFromJson(json['dayOfReminderEmailSentAt']),
       adminNotes: json['adminNotes'] as String?,
+      termsAcceptanceMetadata: AppointmentModel._termsMetadataFromJson(
+          json['termsAcceptanceMetadata']),
+      healthDisclosure:
+          AppointmentModel._healthDisclosureFromJson(json['healthDisclosure']),
+      requiredAcknowledgments:
+          AppointmentModel._requiredAcknowledgmentsFromJson(
+              json['requiredAcknowledgments']),
+      cancellationPolicyAcknowledged:
+          json['cancellationPolicyAcknowledged'] as bool? ?? false,
     );
 
 Map<String, dynamic> _$AppointmentModelToJson(AppointmentModel instance) =>
@@ -76,6 +85,14 @@ Map<String, dynamic> _$AppointmentModelToJson(AppointmentModel instance) =>
       'dayOfReminderEmailSentAt':
           AppointmentModel._timestampToJson(instance.dayOfReminderEmailSentAt),
       'adminNotes': instance.adminNotes,
+      'termsAcceptanceMetadata': AppointmentModel._termsMetadataToJson(
+          instance.termsAcceptanceMetadata),
+      'healthDisclosure':
+          AppointmentModel._healthDisclosureToJson(instance.healthDisclosure),
+      'requiredAcknowledgments':
+          AppointmentModel._requiredAcknowledgmentsToJson(
+              instance.requiredAcknowledgments),
+      'cancellationPolicyAcknowledged': instance.cancellationPolicyAcknowledged,
     };
 
 const _$AppointmentStatusEnumMap = {
@@ -85,3 +102,74 @@ const _$AppointmentStatusEnumMap = {
   AppointmentStatus.noShow: 'no_show',
   AppointmentStatus.canceled: 'canceled',
 };
+
+TermsAcceptanceMetadata _$TermsAcceptanceMetadataFromJson(
+        Map<String, dynamic> json) =>
+    TermsAcceptanceMetadata(
+      termsAccepted: json['termsAccepted'] as bool,
+      termsAcceptedAtUtc:
+          AppointmentModel._timestampFromJson(json['termsAcceptedAtUtc']),
+      termsAcceptedAtLocal:
+          AppointmentModel._timestampFromJson(json['termsAcceptedAtLocal']),
+      ipAddress: json['ipAddress'] as String?,
+      userAgent: json['userAgent'] as String?,
+      platform: json['platform'] as String?,
+      osVersion: json['osVersion'] as String?,
+    );
+
+Map<String, dynamic> _$TermsAcceptanceMetadataToJson(
+        TermsAcceptanceMetadata instance) =>
+    <String, dynamic>{
+      'termsAccepted': instance.termsAccepted,
+      'termsAcceptedAtUtc':
+          AppointmentModel._timestampToJson(instance.termsAcceptedAtUtc),
+      'termsAcceptedAtLocal':
+          AppointmentModel._timestampToJson(instance.termsAcceptedAtLocal),
+      'ipAddress': instance.ipAddress,
+      'userAgent': instance.userAgent,
+      'platform': instance.platform,
+      'osVersion': instance.osVersion,
+    };
+
+HealthDisclosure _$HealthDisclosureFromJson(Map<String, dynamic> json) =>
+    HealthDisclosure(
+      hasSkinConditions: json['hasSkinConditions'] as bool,
+      hasAllergies: json['hasAllergies'] as bool,
+      hasCurrentMedications: json['hasCurrentMedications'] as bool,
+      isPregnantOrBreastfeeding: json['isPregnantOrBreastfeeding'] as bool,
+      hasRecentCosmeticTreatments: json['hasRecentCosmeticTreatments'] as bool,
+      hasKnownReactions: json['hasKnownReactions'] as bool,
+      additionalNotes: json['additionalNotes'] as String?,
+    );
+
+Map<String, dynamic> _$HealthDisclosureToJson(HealthDisclosure instance) =>
+    <String, dynamic>{
+      'hasSkinConditions': instance.hasSkinConditions,
+      'hasAllergies': instance.hasAllergies,
+      'hasCurrentMedications': instance.hasCurrentMedications,
+      'isPregnantOrBreastfeeding': instance.isPregnantOrBreastfeeding,
+      'hasRecentCosmeticTreatments': instance.hasRecentCosmeticTreatments,
+      'hasKnownReactions': instance.hasKnownReactions,
+      'additionalNotes': instance.additionalNotes,
+    };
+
+RequiredAcknowledgments _$RequiredAcknowledgmentsFromJson(
+        Map<String, dynamic> json) =>
+    RequiredAcknowledgments(
+      understandsResultsNotGuaranteed:
+          json['understandsResultsNotGuaranteed'] as bool,
+      understandsServicesNonMedical:
+          json['understandsServicesNonMedical'] as bool,
+      agreesToFollowAftercare: json['agreesToFollowAftercare'] as bool,
+      acceptsInherentRisks: json['acceptsInherentRisks'] as bool,
+    );
+
+Map<String, dynamic> _$RequiredAcknowledgmentsToJson(
+        RequiredAcknowledgments instance) =>
+    <String, dynamic>{
+      'understandsResultsNotGuaranteed':
+          instance.understandsResultsNotGuaranteed,
+      'understandsServicesNonMedical': instance.understandsServicesNonMedical,
+      'agreesToFollowAftercare': instance.agreesToFollowAftercare,
+      'acceptsInherentRisks': instance.acceptsInherentRisks,
+    };

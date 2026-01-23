@@ -131,5 +131,16 @@ service cloud.firestore {
     match /software_enhancements/{enhancementId} {
       allow read, write: if isSuperAdmin();
     }
+    
+    // MARK: - Time-Off Collection
+    /// Time-off - authenticated users can read (clients, admin, super admin)
+    /// Clients need to see time-off to know when business is unavailable for booking
+    /// Admin and super admin can manage time-off periods
+    match /time_off/{timeOffId} {
+      // Allow all authenticated users (clients, admin, super admin) to read
+      allow read: if isAuthenticated();
+      // Only admin and super admin can create, update, and delete
+      allow create, update, delete: if isAdmin();
+    }
   }
 }

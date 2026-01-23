@@ -279,7 +279,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       twitterUrl: _twitterUrlController.text.trim().isEmpty 
           ? null 
           : _twitterUrlController.text.trim(),
-      weeklyHours: _settings?.weeklyHours ?? [],
+      weeklyHours: _settings?.weeklyHours ?? const [],
       cancellationWindowHours: cancellationWindow,
       latePolicyText: _latePolicyController.text.trim(),
       noShowPolicyText: _noShowPolicyController.text.trim(),
@@ -406,6 +406,14 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
               icon: Icons.location_on,
               maxLines: 2,
             ),
+            const SizedBox(height: 32),
+
+            // MARK: - Working Hours Section
+            _buildSectionHeader(
+              title: 'Working Hours',
+              icon: Icons.schedule,
+            ),
+            _buildWorkingHoursEditor(),
             const SizedBox(height: 32),
 
             // MARK: - Branding Section
@@ -700,6 +708,328 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         ],
       ),
     );
+  }
+
+  // MARK: - Working Hours Editor
+  /// Build working hours editor for all days of the week
+  Widget _buildWorkingHoursEditor() {
+    final daysOfWeek = [
+      {'name': 'Sunday', 'index': 0},
+      {'name': 'Monday', 'index': 1},
+      {'name': 'Tuesday', 'index': 2},
+      {'name': 'Wednesday', 'index': 3},
+      {'name': 'Thursday', 'index': 4},
+      {'name': 'Friday', 'index': 5},
+      {'name': 'Saturday', 'index': 6},
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Set your weekly working hours. You can add multiple time slots per day (e.g., 9am-12pm and 1pm-5pm).',
+          style: AppTypography.bodyMedium.copyWith(
+            color: AppColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 16),
+        ...daysOfWeek.map((day) => _buildDayHoursEditor(
+          dayName: day['name'] as String,
+          dayIndex: day['index'] as int,
+        )),
+      ],
+    );
+  }
+
+  /// Build editor for a single day's working hours
+  Widget _buildDayHoursEditor({
+    required String dayName,
+    required int dayIndex,
+  }) {
+    // Get existing hours for this day or create default
+    BusinessHoursModel? dayHours = _settings?.getHoursForDay(dayIndex);
+    final isOpen = dayHours?.isOpen ?? false;
+    final timeSlots = dayHours?.timeSlots ?? [];
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ExpansionTile(
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                dayName,
+                style: AppTypography.titleMedium.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            Switch(
+              value: isOpen,
+              onChanged: (value) {
+                setState(() {
+                  _updateDayHours(dayIndex, isOpen: value);
+                });
+              },
+              activeColor: AppColors.sunflowerYellow,
+            ),
+          ],
+        ),
+        subtitle: isOpen
+            ? Text(
+                timeSlots.isEmpty
+                    ? 'No time slots set'
+                    : _formatTimeSlots(timeSlots),
+                style: AppTypography.bodySmall.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              )
+            : Text(
+                'Closed',
+                style: AppTypography.bodySmall.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+        children: isOpen
+            ? [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ...List.generate(
+                        timeSlots.length ~/ 2,
+                        (index) => _buildTimeSlotEditor(
+                          dayIndex: dayIndex,
+                          slotIndex: index,
+                          startTime: timeSlots[index * 2],
+                          endTime: timeSlots[index * 2 + 1],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _addTimeSlot(dayIndex);
+                          });
+                        },
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add Time Slot'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.sunflowerYellow,
+                          foregroundColor: AppColors.darkBrown,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ]
+            : [],
+      ),
+    );
+  }
+
+  /// Build editor for a single time slot
+  Widget _buildTimeSlotEditor({
+    required int dayIndex,
+    required int slotIndex,
+    required String startTime,
+    required String endTime,
+  }) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      color: AppColors.backgroundCream,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Expanded(
+              child: InkWell(
+                onTap: () async {
+                  final time = await _showTimePicker(startTime);
+                  if (time != null) {
+                    setState(() {
+                      _updateTimeSlot(dayIndex, slotIndex, startTime: time);
+                    });
+                  }
+                },
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Start Time',
+                    prefixIcon: Icon(Icons.access_time),
+                    isDense: true,
+                  ),
+                  child: Text(startTime),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text('to', style: AppTypography.bodyMedium),
+            const SizedBox(width: 8),
+            Expanded(
+              child: InkWell(
+                onTap: () async {
+                  final time = await _showTimePicker(endTime);
+                  if (time != null) {
+                    setState(() {
+                      _updateTimeSlot(dayIndex, slotIndex, endTime: time);
+                    });
+                  }
+                },
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'End Time',
+                    prefixIcon: Icon(Icons.access_time),
+                    isDense: true,
+                  ),
+                  child: Text(endTime),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              icon: const Icon(Icons.delete, color: AppColors.errorRed),
+              onPressed: () {
+                setState(() {
+                  _removeTimeSlot(dayIndex, slotIndex);
+                });
+              },
+              tooltip: 'Remove Time Slot',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Show time picker dialog
+  Future<String?> _showTimePicker(String currentTime) async {
+    // Parse current time (format: "HH:mm")
+    final parts = currentTime.split(':');
+    final hour = int.tryParse(parts[0]) ?? 9;
+    final minute = int.tryParse(parts[1]) ?? 0;
+
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: hour, minute: minute),
+    );
+
+    if (time != null) {
+      return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+    }
+    return null;
+  }
+
+  /// Format time slots for display
+  String _formatTimeSlots(List<String> timeSlots) {
+    if (timeSlots.isEmpty) return 'No time slots';
+    if (timeSlots.length % 2 != 0) return 'Invalid time slots';
+
+    final formatted = <String>[];
+    for (int i = 0; i < timeSlots.length; i += 2) {
+      final start = _formatTimeForDisplay(timeSlots[i]);
+      final end = _formatTimeForDisplay(timeSlots[i + 1]);
+      formatted.add('$start - $end');
+    }
+    return formatted.join(', ');
+  }
+
+  /// Format 24-hour time to 12-hour display format
+  String _formatTimeForDisplay(String time24) {
+    final parts = time24.split(':');
+    final hour = int.parse(parts[0]);
+    final minute = int.parse(parts[1]);
+    final hour12 = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    final period = hour < 12 ? 'AM' : 'PM';
+    return '$hour12:${minute.toString().padLeft(2, '0')} $period';
+  }
+
+  /// Update day hours
+  void _updateDayHours(int dayIndex, {bool? isOpen, List<String>? timeSlots}) {
+    if (_settings == null) {
+      // Settings not loaded yet, can't update
+      return;
+    }
+    
+    final currentHours = _settings!.weeklyHours;
+    final existingIndex = currentHours.indexWhere((h) => h.dayOfWeek == dayIndex);
+
+    BusinessHoursModel updatedHours;
+    if (existingIndex >= 0) {
+      final existing = currentHours[existingIndex];
+      updatedHours = BusinessHoursModel(
+        dayOfWeek: dayIndex,
+        isOpen: isOpen ?? existing.isOpen,
+        timeSlots: timeSlots ?? existing.timeSlots,
+      );
+      final newHours = List<BusinessHoursModel>.from(currentHours);
+      newHours[existingIndex] = updatedHours;
+      _settings = _settings!.copyWith(weeklyHours: newHours);
+    } else {
+      updatedHours = BusinessHoursModel(
+        dayOfWeek: dayIndex,
+        isOpen: isOpen ?? false,
+        timeSlots: timeSlots ?? [],
+      );
+      final newHours = List<BusinessHoursModel>.from(currentHours)..add(updatedHours);
+      _settings = _settings!.copyWith(weeklyHours: newHours);
+    }
+  }
+
+  /// Add a new time slot to a day
+  void _addTimeSlot(int dayIndex) {
+    final currentHours = _settings?.getHoursForDay(dayIndex);
+    final currentSlots = currentHours?.timeSlots ?? [];
+    final newSlots = List<String>.from(currentSlots);
+    
+    // Default to 9:00 - 17:00 if no slots exist
+    if (newSlots.isEmpty) {
+      newSlots.addAll(['09:00', '17:00']);
+    } else {
+      // Add a new slot after the last one (default 1 hour slot)
+      final lastEnd = newSlots.last;
+      final lastEndParts = lastEnd.split(':');
+      final lastHour = int.parse(lastEndParts[0]);
+      final lastMinute = int.parse(lastEndParts[1]);
+      
+      // Add 1 hour to last end time for new start
+      final newStartHour = (lastHour + 1) % 24;
+      final newStart = '${newStartHour.toString().padLeft(2, '0')}:${lastMinute.toString().padLeft(2, '0')}';
+      final newEnd = '${((newStartHour + 1) % 24).toString().padLeft(2, '0')}:${lastMinute.toString().padLeft(2, '0')}';
+      
+      newSlots.addAll([newStart, newEnd]);
+    }
+    
+    _updateDayHours(dayIndex, timeSlots: newSlots);
+  }
+
+  /// Update a time slot
+  void _updateTimeSlot(int dayIndex, int slotIndex, {String? startTime, String? endTime}) {
+    final currentHours = _settings?.getHoursForDay(dayIndex);
+    final currentSlots = currentHours?.timeSlots ?? [];
+    final newSlots = List<String>.from(currentSlots);
+    
+    if (startTime != null) {
+      newSlots[slotIndex * 2] = startTime;
+    }
+    if (endTime != null) {
+      newSlots[slotIndex * 2 + 1] = endTime;
+    }
+    
+    _updateDayHours(dayIndex, timeSlots: newSlots);
+  }
+
+  /// Remove a time slot
+  void _removeTimeSlot(int dayIndex, int slotIndex) {
+    final currentHours = _settings?.getHoursForDay(dayIndex);
+    final currentSlots = currentHours?.timeSlots ?? [];
+    final newSlots = List<String>.from(currentSlots);
+    
+    // Remove start and end time for this slot
+    newSlots.removeAt(slotIndex * 2 + 1); // Remove end first
+    newSlots.removeAt(slotIndex * 2); // Then remove start
+    
+    _updateDayHours(dayIndex, timeSlots: newSlots);
   }
 
   /// Build text field with consistent styling

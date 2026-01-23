@@ -38,6 +38,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
   bool _isLoading = true;
   String? _errorMessage;
   int _unreadCount = 0;
+  bool _showArchived = false;
 
   @override
   void initState() {
@@ -57,7 +58,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
 
     try {
       // Load notifications stream for real-time updates
-      final stream = _notificationService.getNotificationsStream();
+      final stream = _notificationService.getNotificationsStream(includeArchived: _showArchived);
       stream.listen(
         (notifications) {
           logSuccess('Loaded ${notifications.length} notifications', tag: 'AdminNotificationsScreen');
@@ -183,6 +184,140 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     }
   }
 
+  /// Archive a notification
+  Future<void> _archiveNotification(NotificationModel notification) async {
+    try {
+      logLoading('Archiving notification: ${notification.id}', tag: 'AdminNotificationsScreen');
+      await _notificationService.archiveNotification(notification.id);
+      logSuccess('Notification archived', tag: 'AdminNotificationsScreen');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Notification archived'),
+            backgroundColor: AppColors.successGreen,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e, stackTrace) {
+      logError(
+        'Failed to archive notification',
+        tag: 'AdminNotificationsScreen',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to archive: ${e.toString()}'),
+            backgroundColor: AppColors.errorRed,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Unarchive a notification
+  Future<void> _unarchiveNotification(NotificationModel notification) async {
+    try {
+      logLoading('Unarchiving notification: ${notification.id}', tag: 'AdminNotificationsScreen');
+      await _notificationService.unarchiveNotification(notification.id);
+      logSuccess('Notification unarchived', tag: 'AdminNotificationsScreen');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Notification unarchived'),
+            backgroundColor: AppColors.successGreen,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e, stackTrace) {
+      logError(
+        'Failed to unarchive notification',
+        tag: 'AdminNotificationsScreen',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to unarchive: ${e.toString()}'),
+            backgroundColor: AppColors.errorRed,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Delete a notification
+  Future<void> _deleteNotification(NotificationModel notification) async {
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Notification'),
+        content: const Text('Are you sure you want to delete this notification? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.errorRed,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      logLoading('Deleting notification: ${notification.id}', tag: 'AdminNotificationsScreen');
+      await _notificationService.deleteNotification(notification.id);
+      logSuccess('Notification deleted', tag: 'AdminNotificationsScreen');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Notification deleted'),
+            backgroundColor: AppColors.successGreen,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e, stackTrace) {
+      logError(
+        'Failed to delete notification',
+        tag: 'AdminNotificationsScreen',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete: ${e.toString()}'),
+            backgroundColor: AppColors.errorRed,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Dismiss a notification (mark as read without navigating)
+  Future<void> _dismissNotification(NotificationModel notification) async {
+    await _markAsRead(notification);
+  }
+
   /// Navigate to appointment details
   void _navigateToAppointment(String appointmentId) {
     logInfo('Navigating to appointment: $appointmentId', tag: 'AdminNotificationsScreen');
@@ -196,6 +331,17 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
       appBar: AppBar(
         title: const Text('Notifications'),
         actions: [
+          // Toggle archived notifications
+          IconButton(
+            icon: Icon(_showArchived ? Icons.archive : Icons.archive_outlined),
+            onPressed: () {
+              setState(() {
+                _showArchived = !_showArchived;
+              });
+              _loadNotifications();
+            },
+            tooltip: _showArchived ? 'Hide Archived' : 'Show Archived',
+          ),
           if (_unreadCount > 0)
             TextButton.icon(
               icon: const Icon(Icons.done_all),
@@ -299,6 +445,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
   /// Build notification card
   Widget _buildNotificationCard(NotificationModel notification) {
     final isUnread = !notification.isRead;
+    final isArchived = notification.isArchived;
     final icon = _getNotificationIcon(notification.type);
     final iconColor = _getNotificationColor(notification.type);
 
@@ -306,114 +453,186 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       color: isUnread
           ? AppColors.sunflowerYellow.withOpacity(0.1)
-          : null,
+          : isArchived
+              ? AppColors.textSecondary.withOpacity(0.05)
+              : null,
       child: InkWell(
         onTap: () {
-          _markAsRead(notification);
-          _navigateToAppointment(notification.appointmentId);
+          if (!isArchived) {
+            _markAsRead(notification);
+            _navigateToAppointment(notification.appointmentId);
+          }
         },
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Row(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Icon
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: iconColor.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  icon,
-                  color: iconColor,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 16),
-              // Content
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Icon
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: iconColor.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      icon,
+                      color: iconColor,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  // Content
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Text(
-                            notification.title,
-                            style: AppTypography.titleMedium.copyWith(
-                              fontWeight: isUnread ? FontWeight.bold : FontWeight.normal,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                notification.title,
+                                style: AppTypography.titleMedium.copyWith(
+                                  fontWeight: isUnread ? FontWeight.bold : FontWeight.normal,
+                                  decoration: isArchived ? TextDecoration.lineThrough : null,
+                                ),
+                              ),
                             ),
-                          ),
+                            if (isUnread && !isArchived)
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: AppColors.sunflowerYellow,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            if (isArchived)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: AppColors.textSecondary.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  'Archived',
+                                  style: AppTypography.bodySmall.copyWith(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
-                        if (isUnread)
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: AppColors.sunflowerYellow,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      notification.message,
-                      style: AppTypography.bodyMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.person,
-                          size: 14,
-                          color: AppColors.textSecondary,
-                        ),
-                        const SizedBox(width: 4),
+                        const SizedBox(height: 4),
                         Text(
-                          notification.clientName,
-                          style: AppTypography.bodySmall.copyWith(
-                            color: AppColors.textSecondary,
+                          notification.message,
+                          style: AppTypography.bodyMedium.copyWith(
+                            decoration: isArchived ? TextDecoration.lineThrough : null,
                           ),
                         ),
-                        const SizedBox(width: 16),
-                        Icon(
-                          Icons.access_time,
-                          size: 14,
-                          color: AppColors.textSecondary,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _formatDateTime(notification.createdAt),
-                          style: AppTypography.bodySmall.copyWith(
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (notification.appointmentStartTime != null) ...[
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.calendar_today,
-                            size: 14,
-                            color: AppColors.textSecondary,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Appointment: ${_formatDateTime(notification.appointmentStartTime!)}',
-                            style: AppTypography.bodySmall.copyWith(
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.person,
+                              size: 14,
                               color: AppColors.textSecondary,
                             ),
+                            const SizedBox(width: 4),
+                            Text(
+                              notification.clientName,
+                              style: AppTypography.bodySmall.copyWith(
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Icon(
+                              Icons.access_time,
+                              size: 14,
+                              color: AppColors.textSecondary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _formatDateTime(notification.createdAt),
+                              style: AppTypography.bodySmall.copyWith(
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (notification.appointmentStartTime != null) ...[
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.calendar_today,
+                                size: 14,
+                                color: AppColors.textSecondary,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Appointment: ${_formatDateTime(notification.appointmentStartTime!)}',
+                                style: AppTypography.bodySmall.copyWith(
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              // Action buttons
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  // Dismiss button (mark as read)
+                  if (!notification.isRead && !isArchived)
+                    TextButton.icon(
+                      icon: const Icon(Icons.check, size: 16),
+                      label: const Text('Dismiss'),
+                      onPressed: () => _dismissNotification(notification),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.darkBrown,
                       ),
-                    ],
-                  ],
-                ),
+                    ),
+                  // Archive/Unarchive button
+                  if (!isArchived)
+                    TextButton.icon(
+                      icon: const Icon(Icons.archive, size: 16),
+                      label: const Text('Archive'),
+                      onPressed: () => _archiveNotification(notification),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.darkBrown,
+                      ),
+                    )
+                  else
+                    TextButton.icon(
+                      icon: const Icon(Icons.unarchive, size: 16),
+                      label: const Text('Unarchive'),
+                      onPressed: () => _unarchiveNotification(notification),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.darkBrown,
+                      ),
+                    ),
+                  // Delete button
+                  TextButton.icon(
+                    icon: const Icon(Icons.delete, size: 16),
+                    label: const Text('Delete'),
+                    onPressed: () => _deleteNotification(notification),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.errorRed,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

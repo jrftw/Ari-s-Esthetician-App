@@ -55,12 +55,17 @@ dependencies:
   # Date/Time
   timezone: ^0.9.2
 
+  # PDF Generation
+  pdf: ^3.11.1
+  printing: ^5.13.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
   build_runner: ^2.4.0
   json_serializable: ^6.7.1
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
@@ -78,3 +83,19 @@ flutter:
   #       - asset: assets/fonts/Sunflower-Regular.ttf
   #       - asset: assets/fonts/Sunflower-Bold.ttf
   #         weight: 700
+
+# MARK: - App Icon Configuration
+# Purpose: Configure app icons for all platforms (Android, iOS, Web)
+# This uses flutter_launcher_icons to generate platform-specific icons from a single source image
+flutter_launcher_icons:
+  android: true
+  ios: true
+  web:
+    generate: true
+    image_path: "icon/AriA.png"
+    background_color: "#FFF8E7"
+    theme_color: "#F4C430"
+  image_path: "icon/AriA.png"
+  adaptive_icon_background: "#FFF8E7"
+  adaptive_icon_foreground: "icon/AriA.png"
+  remove_alpha_ios: true

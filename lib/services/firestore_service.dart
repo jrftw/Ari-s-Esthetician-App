@@ -9,12 +9,14 @@
 
 // MARK: - Imports
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 import '../models/service_model.dart';
 import '../models/service_category_model.dart';
 import '../models/appointment_model.dart';
 import '../models/client_model.dart';
 import '../models/business_settings_model.dart';
 import '../models/software_enhancement_model.dart';
+import '../models/time_off_model.dart';
 import '../core/constants/app_constants.dart';
 import '../core/logging/app_logger.dart';
 import 'notification_service.dart';
@@ -1315,6 +1317,306 @@ class FirestoreService {
         stackTrace: stackTrace,
       );
       rethrow;
+    }
+  }
+
+  // MARK: - Time-Off Operations
+  /// Get all active time-off periods
+  Future<List<TimeOffModel>> getAllTimeOff() async {
+    try {
+      final snapshot = await _firestore
+          .collection(AppConstants.firestoreTimeOffCollection)
+          .where('isActive', isEqualTo: true)
+          .orderBy('startTime')
+          .get();
+
+      return snapshot.docs
+          .map((doc) => TimeOffModel.fromFirestore(doc))
+          .toList();
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to get all time-off',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Get all time-off periods (including inactive)
+  Future<List<TimeOffModel>> getAllTimeOffIncludingInactive() async {
+    try {
+      final snapshot = await _firestore
+          .collection(AppConstants.firestoreTimeOffCollection)
+          .orderBy('startTime', descending: true)
+          .get();
+
+      return snapshot.docs
+          .map((doc) => TimeOffModel.fromFirestore(doc))
+          .toList();
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to get all time-off including inactive',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Get time-off periods that overlap with a date range
+  Future<List<TimeOffModel>> getTimeOffInRange(
+    DateTime startDate,
+    DateTime endDate,
+  ) async {
+    try {
+      // Get all active time-off periods
+      final allTimeOff = await getAllTimeOff();
+      
+      // Filter to those that overlap with the range
+      return allTimeOff.where((timeOff) {
+        if (!timeOff.isRecurring) {
+          // One-time: check if it overlaps
+          return timeOff.overlapsWith(startDate, endDate);
+        } else {
+          // Recurring: check if any occurrence overlaps
+          final occurrences = timeOff.getOccurrencesInRange(startDate, endDate);
+          return occurrences.isNotEmpty;
+        }
+      }).toList();
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to get time-off in range',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Check if a time slot is available (not blocked by time-off, appointments, or outside working hours)
+  Future<bool> isTimeSlotAvailable(
+    DateTime startTime,
+    DateTime endTime,
+  ) async {
+    try {
+      // MARK: - Business Working Hours Check
+      // First check if the time slot is within business working hours
+      final businessSettings = await getBusinessSettings();
+      if (businessSettings != null) {
+        // Get day of week (0 = Sunday, 6 = Saturday)
+        final dayOfWeek = startTime.weekday % 7; // Convert Monday=1 to Sunday=0 format
+        
+        final dayHours = businessSettings.getHoursForDay(dayOfWeek);
+        
+        // If business is closed on this day, slot is not available
+        if (dayHours == null || !dayHours.isOpen || dayHours.timeSlots.isEmpty) {
+          AppLogger().logInfo(
+            'Time slot not available: business is closed on day $dayOfWeek',
+            tag: 'FirestoreService',
+          );
+          return false;
+        }
+        
+        // Check if start and end times are within working hours
+        bool isWithinWorkingHours = false;
+        final startTimeOfDay = TimeOfDay(hour: startTime.hour, minute: startTime.minute);
+        final endTimeOfDay = TimeOfDay(hour: endTime.hour, minute: endTime.minute);
+        
+        for (int i = 0; i < dayHours.timeSlots.length; i += 2) {
+          if (i + 1 >= dayHours.timeSlots.length) break;
+          
+          final startTimeStr = dayHours.timeSlots[i];
+          final endTimeStr = dayHours.timeSlots[i + 1];
+          
+          final startParts = startTimeStr.split(':');
+          final endParts = endTimeStr.split(':');
+          
+          if (startParts.length != 2 || endParts.length != 2) continue;
+          
+          final slotStartHour = int.tryParse(startParts[0]);
+          final slotStartMinute = int.tryParse(startParts[1]);
+          final slotEndHour = int.tryParse(endParts[0]);
+          final slotEndMinute = int.tryParse(endParts[1]);
+          
+          if (slotStartHour == null || slotStartMinute == null || slotEndHour == null || slotEndMinute == null) continue;
+          
+          final slotStartTime = TimeOfDay(hour: slotStartHour, minute: slotStartMinute);
+          final slotEndTime = TimeOfDay(hour: slotEndHour, minute: slotEndMinute);
+          
+          // Check if the appointment time is within this working hour slot
+          if (_isTimeOfDayBeforeOrEqual(slotStartTime, startTimeOfDay) &&
+              _isTimeOfDayBeforeOrEqual(startTimeOfDay, slotEndTime) &&
+              _isTimeOfDayBeforeOrEqual(endTimeOfDay, slotEndTime)) {
+            isWithinWorkingHours = true;
+            break;
+          }
+        }
+        
+        if (!isWithinWorkingHours) {
+          AppLogger().logInfo(
+            'Time slot not available: outside working hours',
+            tag: 'FirestoreService',
+          );
+          return false;
+        }
+      }
+      
+      // MARK: - Appointment Overlap Check
+      // Check for overlapping appointments
+      final overlappingAppointments = await _checkOverlappingAppointments(
+        startTime,
+        endTime,
+      );
+      if (overlappingAppointments.isNotEmpty) {
+        return false;
+      }
+
+      // MARK: - Time-Off Overlap Check
+      // Check for overlapping time-off
+      final overlappingTimeOff = await getTimeOffInRange(startTime, endTime);
+      for (final timeOff in overlappingTimeOff) {
+        if (!timeOff.isRecurring) {
+          if (timeOff.overlapsWith(startTime, endTime)) {
+            return false;
+          }
+        } else {
+          // Check if any occurrence overlaps
+          final occurrences = timeOff.getOccurrencesInRange(startTime, endTime);
+          for (final occurrence in occurrences) {
+            if (occurrence.start.isBefore(endTime) && 
+                occurrence.end.isAfter(startTime)) {
+              return false;
+            }
+          }
+        }
+      }
+
+      return true;
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to check time slot availability',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+  
+  /// Helper method to compare TimeOfDay values
+  bool _isTimeOfDayBeforeOrEqual(TimeOfDay a, TimeOfDay b) {
+    if (a.hour < b.hour) return true;
+    if (a.hour > b.hour) return false;
+    return a.minute <= b.minute;
+  }
+
+  /// Get time-off by ID
+  Future<TimeOffModel?> getTimeOffById(String timeOffId) async {
+    try {
+      final doc = await _firestore
+          .collection(AppConstants.firestoreTimeOffCollection)
+          .doc(timeOffId)
+          .get();
+
+      if (!doc.exists) return null;
+      return TimeOffModel.fromFirestore(doc);
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to get time-off by ID',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Create a new time-off period
+  Future<String> createTimeOff(TimeOffModel timeOff) async {
+    try {
+      final docRef = await _firestore
+          .collection(AppConstants.firestoreTimeOffCollection)
+          .add(timeOff.toFirestore());
+
+      AppLogger().logInfo('Time-off created: ${docRef.id}', tag: 'FirestoreService');
+      return docRef.id;
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to create time-off',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Update an existing time-off period
+  Future<void> updateTimeOff(TimeOffModel timeOff) async {
+    try {
+      await _firestore
+          .collection(AppConstants.firestoreTimeOffCollection)
+          .doc(timeOff.id)
+          .update(timeOff.copyWith(updatedAt: DateTime.now()).toFirestore());
+
+      AppLogger().logInfo('Time-off updated: ${timeOff.id}', tag: 'FirestoreService');
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to update time-off',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Delete a time-off period
+  Future<void> deleteTimeOff(String timeOffId) async {
+    try {
+      await _firestore
+          .collection(AppConstants.firestoreTimeOffCollection)
+          .doc(timeOffId)
+          .delete();
+
+      AppLogger().logInfo('Time-off deleted: $timeOffId', tag: 'FirestoreService');
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to delete time-off',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Get time-off stream (real-time updates)
+  Stream<List<TimeOffModel>> getTimeOffStream() {
+    try {
+      return _firestore
+          .collection(AppConstants.firestoreTimeOffCollection)
+          .where('isActive', isEqualTo: true)
+          .orderBy('startTime')
+          .snapshots()
+          .map((snapshot) {
+            return snapshot.docs
+                .map((doc) => TimeOffModel.fromFirestore(doc))
+                .toList();
+          });
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to get time-off stream',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      // Return empty stream on error
+      return Stream.value([]);
     }
   }
 }

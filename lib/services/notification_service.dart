@@ -163,16 +163,24 @@ class NotificationService {
   // MARK: - Notification Retrieval
   /// Get all notifications (for admin)
   /// Returns notifications sorted by creation date (newest first)
-  Future<List<NotificationModel>> getAllNotifications() async {
+  /// Optionally filters out archived notifications
+  Future<List<NotificationModel>> getAllNotifications({bool includeArchived = false}) async {
     try {
       final snapshot = await _firestore
           .collection(AppConstants.firestoreNotificationsCollection)
           .orderBy('createdAt', descending: true)
           .get();
 
-      return snapshot.docs
+      var notifications = snapshot.docs
           .map((doc) => NotificationModel.fromFirestore(doc))
           .toList();
+      
+      // Filter archived notifications in app code
+      if (!includeArchived) {
+        notifications = notifications.where((n) => !n.isArchived).toList();
+      }
+
+      return notifications;
     } catch (e, stackTrace) {
       AppLogger().logError(
         'Failed to get all notifications',
@@ -185,6 +193,7 @@ class NotificationService {
   }
 
   /// Get unread notifications count
+  /// Only counts non-archived notifications
   Future<int> getUnreadNotificationsCount() async {
     try {
       final snapshot = await _firestore
@@ -192,7 +201,15 @@ class NotificationService {
           .where('isRead', isEqualTo: false)
           .get();
 
-      return snapshot.docs.length;
+      // Filter archived notifications in app code
+      final unreadCount = snapshot.docs
+          .where((doc) {
+            final data = doc.data();
+            return data['isArchived'] != true;
+          })
+          .length;
+
+      return unreadCount;
     } catch (e, stackTrace) {
       AppLogger().logError(
         'Failed to get unread notifications count',
@@ -206,16 +223,24 @@ class NotificationService {
 
   /// Get notifications stream (real-time updates)
   /// Returns notifications sorted by creation date (newest first)
-  Stream<List<NotificationModel>> getNotificationsStream() {
+  /// Optionally filters out archived notifications
+  Stream<List<NotificationModel>> getNotificationsStream({bool includeArchived = false}) {
     try {
       return _firestore
           .collection(AppConstants.firestoreNotificationsCollection)
           .orderBy('createdAt', descending: true)
           .snapshots()
           .map((snapshot) {
-            return snapshot.docs
+            var notifications = snapshot.docs
                 .map((doc) => NotificationModel.fromFirestore(doc))
                 .toList();
+            
+            // Filter archived notifications in app code to avoid Firestore index requirements
+            if (!includeArchived) {
+              notifications = notifications.where((n) => !n.isArchived).toList();
+            }
+            
+            return notifications;
           });
     } catch (e, stackTrace) {
       AppLogger().logError(
@@ -229,13 +254,22 @@ class NotificationService {
   }
 
   /// Get unread notifications count stream (real-time updates)
+  /// Only counts non-archived notifications
   Stream<int> getUnreadNotificationsCountStream() {
     try {
       return _firestore
           .collection(AppConstants.firestoreNotificationsCollection)
           .where('isRead', isEqualTo: false)
           .snapshots()
-          .map((snapshot) => snapshot.docs.length);
+          .map((snapshot) {
+            // Filter archived notifications in app code
+            return snapshot.docs
+                .where((doc) {
+                  final data = doc.data();
+                  return data['isArchived'] != true;
+                })
+                .length;
+          });
     } catch (e, stackTrace) {
       AppLogger().logError(
         'Failed to get unread notifications count stream',
@@ -275,6 +309,7 @@ class NotificationService {
   }
 
   /// Mark all notifications as read
+  /// Only marks non-archived notifications
   Future<void> markAllNotificationsAsRead() async {
     try {
       final unreadNotifications = await _firestore
@@ -284,18 +319,24 @@ class NotificationService {
 
       final batch = _firestore.batch();
       final now = FieldValue.serverTimestamp();
+      int count = 0;
 
       for (final doc in unreadNotifications.docs) {
-        batch.update(doc.reference, {
-          'isRead': true,
-          'readAt': now,
-        });
+        final data = doc.data();
+        // Only mark non-archived notifications as read
+        if (data['isArchived'] != true) {
+          batch.update(doc.reference, {
+            'isRead': true,
+            'readAt': now,
+          });
+          count++;
+        }
       }
 
       await batch.commit();
 
       AppLogger().logInfo(
-        'Marked ${unreadNotifications.docs.length} notifications as read',
+        'Marked $count notifications as read',
         tag: 'NotificationService',
       );
     } catch (e, stackTrace) {
@@ -324,6 +365,58 @@ class NotificationService {
     } catch (e, stackTrace) {
       AppLogger().logError(
         'Failed to delete notification',
+        tag: 'NotificationService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Archive a notification
+  Future<void> archiveNotification(String notificationId) async {
+    try {
+      await _firestore
+          .collection(AppConstants.firestoreNotificationsCollection)
+          .doc(notificationId)
+          .update({
+        'isArchived': true,
+        'archivedAt': FieldValue.serverTimestamp(),
+      });
+
+      AppLogger().logInfo(
+        'Archived notification: $notificationId',
+        tag: 'NotificationService',
+      );
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to archive notification',
+        tag: 'NotificationService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Unarchive a notification
+  Future<void> unarchiveNotification(String notificationId) async {
+    try {
+      await _firestore
+          .collection(AppConstants.firestoreNotificationsCollection)
+          .doc(notificationId)
+          .update({
+        'isArchived': false,
+        'archivedAt': FieldValue.delete(),
+      });
+
+      AppLogger().logInfo(
+        'Unarchived notification: $notificationId',
+        tag: 'NotificationService',
+      );
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to unarchive notification',
         tag: 'NotificationService',
         error: e,
         stackTrace: stackTrace,

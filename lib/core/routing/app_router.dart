@@ -28,6 +28,7 @@ import '../../screens/admin/admin_category_management_screen.dart';
 import '../../screens/admin/admin_earnings_screen.dart';
 import '../../screens/admin/admin_notifications_screen.dart';
 import '../../screens/admin/admin_software_enhancements_screen.dart';
+import '../../screens/admin/admin_time_off_screen.dart';
 import '../../screens/auth/login_screen.dart';
 import '../../screens/auth/signup_screen.dart';
 import '../../screens/splash_screen.dart';
@@ -219,6 +220,11 @@ class AppRouter {
           name: 'admin-software-enhancements',
           builder: (context, state) => const AdminSoftwareEnhancementsScreen(),
         ),
+        GoRoute(
+          path: AppConstants.routeAdminTimeOff,
+          name: 'admin-time-off',
+          builder: (context, state) => const AdminTimeOffScreen(),
+        ),
 
         // MARK: - Settings Route (General)
         GoRoute(
@@ -236,13 +242,15 @@ class AppRouter {
   // MARK: - Redirect Handler
   /// Handles route redirection based on authentication and role
   /// Waits for auth state to be restored before making routing decisions
+  /// Firebase Auth persists sessions automatically, so we always check for existing sessions
   Future<String?> _handleRedirect(BuildContext context, GoRouterState state) async {
     logRouter('Handling redirect for: ${state.matchedLocation}', tag: 'AppRouter');
     logDebug('Full location: ${state.uri}', tag: 'AppRouter');
     
     // MARK: - Wait for Auth State Initialization
-    /// Wait for auth state to be restored (important for web/simulator refresh)
+    /// Wait for auth state to be restored (important for web/simulator refresh and hot reload)
     /// Firebase Auth on web needs time to restore session from IndexedDB
+    /// Firebase Auth persists sessions automatically, so we always wait for restoration
     if (!_authStateNotifier.isInitialized) {
       logAuth('Auth state not initialized yet - waiting...', tag: 'AppRouter');
       // Wait for auth state to be initialized (max 3 seconds)
@@ -254,25 +262,41 @@ class AppRouter {
       logAuth('Auth state initialization check complete (attempts: $attempts)', tag: 'AppRouter');
     }
     
-    // Get current user from notifier (which has the latest state)
-    final user = _authStateNotifier.currentUser ?? FirebaseAuth.instance.currentUser;
-    logAuth('Current user: ${user?.email ?? "null"}', tag: 'AppRouter');
+    // MARK: - Check Firebase Auth Session (Always)
+    /// Firebase Auth persists sessions automatically, so we always check for existing sessions
+    /// This ensures users stay logged in after hot reload and app restarts
+    /// Wait a bit more for Firebase Auth to restore session (especially important for hot reload)
+    User? user = _authStateNotifier.currentUser ?? FirebaseAuth.instance.currentUser;
     
-    // MARK: - Check for Session Restoration
-    /// If user is null but "keep signed in" is enabled, try to restore session
+    // If no user found yet, wait a bit more for Firebase Auth to restore from local storage
+    // This is critical for hot reload and app restarts
     if (user == null) {
-      final keepSignedIn = await _preferencesService.getKeepSignedIn();
-      if (keepSignedIn) {
-        logAuth('Keep signed in enabled but no user - checking for session restoration', tag: 'AppRouter');
-        // Wait a bit more for Firebase Auth to restore session
-        await Future.delayed(const Duration(milliseconds: 500));
-        final restoredUser = FirebaseAuth.instance.currentUser;
-        if (restoredUser != null) {
-          logAuth('Session restored: ${restoredUser.email}', tag: 'AppRouter');
-          // Update notifier with restored user
-          _authStateNotifier.notifyListeners();
+      logAuth('No user found initially - waiting for Firebase Auth session restoration...', tag: 'AppRouter');
+      // Wait for auth state changes to emit (Firebase restores session automatically)
+      await Future.delayed(const Duration(milliseconds: 500));
+      user = FirebaseAuth.instance.currentUser;
+      
+      // If still no user, wait for auth state changes stream
+      if (user == null) {
+        try {
+          // Wait for auth state restoration (Firebase handles this automatically)
+          final restoredUser = await _authService.waitForAuthStateRestoration(timeout: const Duration(seconds: 2));
+          if (restoredUser != null) {
+            user = restoredUser;
+            logAuth('Session restored from Firebase Auth: ${user.email}', tag: 'AppRouter');
+            // Update notifier with restored user
+            _authStateNotifier.notifyListeners();
+          }
+        } catch (e) {
+          logAuth('Error waiting for auth state restoration: $e', tag: 'AppRouter');
         }
+      } else {
+        logAuth('Session found after delay: ${user.email}', tag: 'AppRouter');
+        // Update notifier with found user
+        _authStateNotifier.notifyListeners();
       }
+    } else {
+      logAuth('Current user found: ${user.email}', tag: 'AppRouter');
     }
     
     final isLoginRoute = state.matchedLocation == '/login';
@@ -294,11 +318,12 @@ class AppRouter {
     }
 
     // Get final user state after potential restoration
-    final finalUser = _authStateNotifier.currentUser ?? FirebaseAuth.instance.currentUser;
+    // Always check Firebase Auth directly as it persists sessions automatically
+    final finalUser = user ?? _authStateNotifier.currentUser ?? FirebaseAuth.instance.currentUser;
     
     // Redirect to login if not authenticated for protected routes
     if (finalUser == null) {
-      logRouter('No user - redirecting to /login', tag: 'AppRouter');
+      logRouter('No user found after restoration - redirecting to /login', tag: 'AppRouter');
       return '/login';
     }
 

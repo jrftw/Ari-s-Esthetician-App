@@ -95,6 +95,8 @@ class _LoginScreenState extends State<LoginScreen> {
       final password = _passwordController.text;
 
       // Sign in with email and password
+      // Note: Firebase Auth persists sessions automatically regardless of keepSignedIn parameter
+      // The keepSignedIn parameter is mainly for UI preference tracking
       await _authService.signInWithEmailAndPassword(
         email: email,
         password: password,
@@ -104,6 +106,8 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       // Save preferences based on checkboxes
+      // Note: Firebase Auth will keep the user signed in automatically
+      // The keepSignedIn preference is for UI purposes (showing checkbox state)
       await _saveLoginPreferences(email, password);
 
       // Check if user is admin and redirect accordingly
@@ -171,11 +175,15 @@ class _LoginScreenState extends State<LoginScreen> {
         await _preferencesService.clearSavedPassword();
       }
 
-      // If keep signed in is unchecked, ensure we don't persist session
+      // Note: Firebase Auth persists sessions automatically regardless of keepSignedIn preference
+      // The keepSignedIn preference is mainly for UI purposes (showing checkbox state)
+      // Firebase Auth will keep users signed in until they explicitly sign out
       if (!_keepSignedIn) {
-        // Firebase Auth will handle session persistence automatically
-        // but we can clear the preference
-        AppLogger().logInfo('Keep signed in is disabled', tag: 'LoginScreen');
+        // User unchecked "keep signed in" - but Firebase Auth still persists the session
+        // The session will remain until the user explicitly signs out
+        AppLogger().logInfo('Keep signed in checkbox unchecked, but Firebase Auth persists sessions automatically', tag: 'LoginScreen');
+      } else {
+        AppLogger().logInfo('Keep signed in checkbox checked - preference saved', tag: 'LoginScreen');
       }
     } catch (e) {
       AppLogger().logError(

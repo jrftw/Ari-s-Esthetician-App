@@ -22,11 +22,15 @@ import '../../core/logging/app_logger.dart';
 import '../../models/service_model.dart';
 import '../../models/service_category_model.dart';
 import '../../models/appointment_model.dart';
+import '../../models/business_settings_model.dart';
 import '../../services/firestore_service.dart';
 import '../../services/view_mode_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/payment_service.dart';
 import '../../services/email_service.dart';
+import '../../services/device_metadata_service.dart';
+import '../../core/constants/terms_and_conditions.dart';
+import '../../models/appointment_model.dart';
 import 'client_confirmation_screen.dart';
 
 // MARK: - Booking Step Enum
@@ -72,6 +76,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
   bool _isSubmitting = false;
   String? _errorMessage;
   bool _paymentsEnabled = false;
+  BusinessSettingsModel? _businessSettings;
   
   // MARK: - Category State Variables
   List<ServiceCategoryModel> _categories = [];
@@ -120,10 +125,37 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
   
   // MARK: - Available Time Slots
   List<TimeOfDay> _availableTimeSlots = [];
+  List<TimeOfDay> _filteredAvailableTimeSlots = [];
+  bool _isLoadingAvailability = false;
   
   // MARK: - Description Expansion State
   /// Set of service IDs whose descriptions are currently expanded
   final Set<String> _expandedDescriptions = {};
+  
+  // MARK: - Legal Compliance State
+  /// Health disclosure checkboxes
+  bool _hasSkinConditions = false;
+  bool _hasAllergies = false;
+  bool _hasCurrentMedications = false;
+  bool _isPregnantOrBreastfeeding = false;
+  bool _hasRecentCosmeticTreatments = false;
+  bool _hasKnownReactions = false;
+  final TextEditingController _healthDisclosureNotesController = TextEditingController();
+  
+  /// Required acknowledgment checkboxes
+  bool _understandsResultsNotGuaranteed = false;
+  bool _understandsServicesNonMedical = false;
+  bool _agreesToFollowAftercare = false;
+  bool _acceptsInherentRisks = false;
+  
+  /// Terms & Conditions acceptance
+  bool _termsAccepted = false;
+  
+  /// Cancellation policy acknowledgment
+  bool _cancellationPolicyAcknowledged = false;
+  
+  /// Terms & Conditions modal visibility
+  bool _showTermsModal = false;
   
   @override
   void initState() {
@@ -132,30 +164,35 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
     logWidgetLifecycle('ClientBookingScreen', 'initState', tag: 'ClientBookingScreen');
     _loadServices();
     _loadCategories();
-    _generateTimeSlots();
     _checkAdminViewMode();
-    _loadBusinessSettings();
+    _loadBusinessSettings().then((_) {
+      // Generate time slots after settings are loaded
+      _generateTimeSlots();
+    });
     _initializePayment();
     
     // Listen to view mode changes
     _viewModeService.addListener(_onViewModeChanged);
   }
   
-  /// Load business settings to check if payments are enabled
+  /// Load business settings to check if payments are enabled and get working hours
   Future<void> _loadBusinessSettings() async {
     try {
       logLoading('Loading business settings...', tag: 'ClientBookingScreen');
       final settings = await _firestoreService.getBusinessSettings();
       if (mounted && settings != null) {
         setState(() {
+          _businessSettings = settings;
           _paymentsEnabled = settings.paymentsEnabled;
         });
         logInfo('Payments enabled: $_paymentsEnabled', tag: 'ClientBookingScreen');
+        logInfo('Working hours loaded: ${settings.weeklyHours.length} days configured', tag: 'ClientBookingScreen');
       }
     } catch (e, stackTrace) {
       logError('Failed to load business settings', tag: 'ClientBookingScreen', error: e, stackTrace: stackTrace);
       // Default to payments disabled if we can't load settings
       setState(() {
+        _businessSettings = null;
         _paymentsEnabled = false;
       });
     }
@@ -208,6 +245,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
     _cvcController.dispose();
     _cardholderNameController.dispose();
     _tipAmountController.dispose();
+    _healthDisclosureNotesController.dispose();
     super.dispose();
   }
   
@@ -265,13 +303,235 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
   }
   
   // MARK: - Time Slot Generation
-  /// Generate available time slots (9 AM - 6 PM, every 30 minutes)
+  /// Generate available time slots based on business working hours
+  /// If no business settings are available, defaults to 9 AM - 6 PM, every 30 minutes
   void _generateTimeSlots() {
     _availableTimeSlots = [];
-    for (int hour = 9; hour < 18; hour++) {
-      _availableTimeSlots.add(TimeOfDay(hour: hour, minute: 0));
-      _availableTimeSlots.add(TimeOfDay(hour: hour, minute: 30));
+    
+    // If no business settings, use default hours
+    if (_businessSettings == null || _businessSettings!.weeklyHours.isEmpty) {
+      logWarning('No business settings available, using default hours (9 AM - 6 PM)', tag: 'ClientBookingScreen');
+      for (int hour = 9; hour < 18; hour++) {
+        _availableTimeSlots.add(TimeOfDay(hour: hour, minute: 0));
+        _availableTimeSlots.add(TimeOfDay(hour: hour, minute: 30));
+      }
+      return;
     }
+    
+    // Generate time slots for all days based on working hours
+    // We'll filter by day when a date is selected
+    final allTimeSlots = <TimeOfDay>{};
+    
+    for (final dayHours in _businessSettings!.weeklyHours) {
+      if (!dayHours.isOpen || dayHours.timeSlots.isEmpty) {
+        continue;
+      }
+      
+      // Process each time slot pair (start, end)
+      for (int i = 0; i < dayHours.timeSlots.length; i += 2) {
+        if (i + 1 >= dayHours.timeSlots.length) break;
+        
+        final startTimeStr = dayHours.timeSlots[i];
+        final endTimeStr = dayHours.timeSlots[i + 1];
+        
+        // Parse start and end times (format: "HH:mm")
+        final startParts = startTimeStr.split(':');
+        final endParts = endTimeStr.split(':');
+        
+        if (startParts.length != 2 || endParts.length != 2) continue;
+        
+        final startHour = int.tryParse(startParts[0]);
+        final startMinute = int.tryParse(startParts[1]);
+        final endHour = int.tryParse(endParts[0]);
+        final endMinute = int.tryParse(endParts[1]);
+        
+        if (startHour == null || startMinute == null || endHour == null || endMinute == null) continue;
+        
+        // Generate 30-minute intervals between start and end
+        var currentHour = startHour;
+        var currentMinute = startMinute;
+        
+        while (currentHour < endHour || (currentHour == endHour && currentMinute < endMinute)) {
+          allTimeSlots.add(TimeOfDay(hour: currentHour, minute: currentMinute));
+          
+          // Add 30 minutes
+          currentMinute += 30;
+          if (currentMinute >= 60) {
+            currentMinute -= 60;
+            currentHour += 1;
+          }
+        }
+      }
+    }
+    
+    _availableTimeSlots = allTimeSlots.toList()..sort((a, b) {
+      if (a.hour != b.hour) return a.hour.compareTo(b.hour);
+      return a.minute.compareTo(b.minute);
+    });
+    
+    logInfo('Generated ${_availableTimeSlots.length} time slots from business hours', tag: 'ClientBookingScreen');
+  }
+  
+  /// Filter available time slots based on business working hours, booked appointments, and time-off
+  Future<void> _filterAvailableTimeSlots() async {
+    if (_selectedDate == null) {
+      setState(() {
+        _filteredAvailableTimeSlots = [];
+      });
+      return;
+    }
+    
+    setState(() {
+      _isLoadingAvailability = true;
+    });
+    
+    try {
+      logLoading('Filtering available time slots...', tag: 'ClientBookingScreen');
+      
+      // Get day of week (0 = Sunday, 6 = Saturday)
+      final dayOfWeek = _selectedDate!.weekday % 7; // Convert Monday=1 to Sunday=0 format
+      
+      // Get working hours for this day
+      BusinessHoursModel? dayHours;
+      if (_businessSettings != null) {
+        dayHours = _businessSettings!.getHoursForDay(dayOfWeek);
+      }
+      
+      // If business is closed on this day, no slots available
+      if (dayHours == null || !dayHours.isOpen || dayHours.timeSlots.isEmpty) {
+        logInfo('Business is closed on selected day (dayOfWeek: $dayOfWeek)', tag: 'ClientBookingScreen');
+        setState(() {
+          _filteredAvailableTimeSlots = [];
+          _isLoadingAvailability = false;
+        });
+        return;
+      }
+      
+      // Generate time slots for this specific day based on working hours
+      final dayTimeSlots = <TimeOfDay>[];
+      for (int i = 0; i < dayHours.timeSlots.length; i += 2) {
+        if (i + 1 >= dayHours.timeSlots.length) break;
+        
+        final startTimeStr = dayHours.timeSlots[i];
+        final endTimeStr = dayHours.timeSlots[i + 1];
+        
+        final startParts = startTimeStr.split(':');
+        final endParts = endTimeStr.split(':');
+        
+        if (startParts.length != 2 || endParts.length != 2) continue;
+        
+        final startHour = int.tryParse(startParts[0]);
+        final startMinute = int.tryParse(startParts[1]);
+        final endHour = int.tryParse(endParts[0]);
+        final endMinute = int.tryParse(endParts[1]);
+        
+        if (startHour == null || startMinute == null || endHour == null || endMinute == null) continue;
+        
+        // Generate 30-minute intervals between start and end
+        var currentHour = startHour;
+        var currentMinute = startMinute;
+        
+        while (currentHour < endHour || (currentHour == endHour && currentMinute < endMinute)) {
+          dayTimeSlots.add(TimeOfDay(hour: currentHour, minute: currentMinute));
+          
+          // Add 30 minutes
+          currentMinute += 30;
+          if (currentMinute >= 60) {
+            currentMinute -= 60;
+            currentHour += 1;
+          }
+        }
+      }
+      
+      // Calculate total duration needed for all selected services
+      final totalDurationMinutes = _selectedServices.fold<int>(
+        0,
+        (sum, service) => sum + service.durationMinutes + service.bufferTimeAfterMinutes,
+      );
+      
+      final availableSlots = <TimeOfDay>[];
+      
+      for (final timeSlot in dayTimeSlots) {
+        // Create DateTime for this time slot
+        final slotDateTime = DateTime(
+          _selectedDate!.year,
+          _selectedDate!.month,
+          _selectedDate!.day,
+          timeSlot.hour,
+          timeSlot.minute,
+        );
+        
+        // Calculate end time for all services
+        final slotEndDateTime = slotDateTime.add(Duration(minutes: totalDurationMinutes));
+        
+        // Check if end time is still within working hours
+        bool isWithinWorkingHours = false;
+        for (int i = 0; i < dayHours.timeSlots.length; i += 2) {
+          if (i + 1 >= dayHours.timeSlots.length) break;
+          
+          final startTimeStr = dayHours.timeSlots[i];
+          final endTimeStr = dayHours.timeSlots[i + 1];
+          
+          final startParts = startTimeStr.split(':');
+          final endParts = endTimeStr.split(':');
+          
+          if (startParts.length != 2 || endParts.length != 2) continue;
+          
+          final slotStartHour = int.tryParse(startParts[0]);
+          final slotStartMinute = int.tryParse(startParts[1]);
+          final slotEndHour = int.tryParse(endParts[0]);
+          final slotEndMinute = int.tryParse(endParts[1]);
+          
+          if (slotStartHour == null || slotStartMinute == null || slotEndHour == null || slotEndMinute == null) continue;
+          
+          final slotStartTime = TimeOfDay(hour: slotStartHour, minute: slotStartMinute);
+          final slotEndTime = TimeOfDay(hour: slotEndHour, minute: slotEndMinute);
+          
+          // Check if the appointment fits within this time slot
+          if (_isTimeOfDayBeforeOrEqual(slotStartTime, timeSlot) &&
+              _isTimeOfDayBeforeOrEqual(timeSlot, slotEndTime)) {
+            // Check if end time is also within working hours
+            final endTimeOfDay = TimeOfDay(hour: slotEndDateTime.hour, minute: slotEndDateTime.minute);
+            if (_isTimeOfDayBeforeOrEqual(endTimeOfDay, slotEndTime)) {
+              isWithinWorkingHours = true;
+              break;
+            }
+          }
+        }
+        
+        if (!isWithinWorkingHours) continue;
+        
+        // Check if this time slot is available (not blocked by appointments or time-off)
+        final isAvailable = await _firestoreService.isTimeSlotAvailable(
+          slotDateTime,
+          slotEndDateTime,
+        );
+        
+        if (isAvailable) {
+          availableSlots.add(timeSlot);
+        }
+      }
+      
+      logSuccess('Filtered ${availableSlots.length} available time slots', tag: 'ClientBookingScreen');
+      
+      setState(() {
+        _filteredAvailableTimeSlots = availableSlots;
+        _isLoadingAvailability = false;
+      });
+    } catch (e, stackTrace) {
+      logError('Failed to filter available time slots', tag: 'ClientBookingScreen', error: e, stackTrace: stackTrace);
+      setState(() {
+        _filteredAvailableTimeSlots = []; // Fallback to empty if error
+        _isLoadingAvailability = false;
+      });
+    }
+  }
+  
+  /// Helper method to compare TimeOfDay values
+  bool _isTimeOfDayBeforeOrEqual(TimeOfDay a, TimeOfDay b) {
+    if (a.hour < b.hour) return true;
+    if (a.hour > b.hour) return false;
+    return a.minute <= b.minute;
   }
   
   // MARK: - Service Filtering
@@ -377,6 +637,25 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
         return;
       }
       
+      // Double-check availability before proceeding
+      final totalDurationMinutes = _selectedServices.fold<int>(
+        0,
+        (sum, service) => sum + service.durationMinutes + service.bufferTimeAfterMinutes,
+      );
+      final endDateTime = _selectedDateTime!.add(Duration(minutes: totalDurationMinutes));
+      
+      final isAvailable = await _firestoreService.isTimeSlotAvailable(
+        _selectedDateTime!,
+        endDateTime,
+      );
+      
+      if (!isAvailable) {
+        _showError('This time slot is no longer available. Please select a different time.');
+        // Refresh available slots
+        await _filterAvailableTimeSlots();
+        return;
+      }
+      
       setState(() {
         _currentStep = BookingStep.clientInformation;
       });
@@ -384,6 +663,26 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
       if (!_formKey.currentState!.validate()) {
         return;
       }
+      
+      // Validate all required legal compliance acceptances
+      if (!_termsAccepted) {
+        _showError('You must accept the Terms & Conditions to proceed');
+        return;
+      }
+      
+      if (!_understandsResultsNotGuaranteed ||
+          !_understandsServicesNonMedical ||
+          !_agreesToFollowAftercare ||
+          !_acceptsInherentRisks) {
+        _showError('You must accept all required acknowledgments to proceed');
+        return;
+      }
+      
+      if (!_cancellationPolicyAcknowledged) {
+        _showError('You must acknowledge the cancellation policy to proceed');
+        return;
+      }
+      
       // If payments are enabled, go to payment step
       if (_paymentsEnabled) {
         setState(() {
@@ -598,9 +897,47 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
   // MARK: - Booking Submission
   /// Submit booking to Firestore
   /// Creates multiple appointments if multiple services are selected
+  /// Captures and stores all legal compliance data
   Future<void> _submitBooking() async {
     try {
       logLoading('Submitting booking...', tag: 'ClientBookingScreen');
+      
+      // Capture device metadata for legal compliance
+      final deviceMetadata = await DeviceMetadataService.getDeviceMetadata();
+      final nowUtc = DateTime.now().toUtc();
+      final nowLocal = DateTime.now();
+      
+      // Create Terms Acceptance Metadata
+      final termsAcceptanceMetadata = TermsAcceptanceMetadata(
+        termsAccepted: _termsAccepted,
+        termsAcceptedAtUtc: nowUtc,
+        termsAcceptedAtLocal: nowLocal,
+        ipAddress: deviceMetadata['ipAddress'],
+        userAgent: deviceMetadata['userAgent'],
+        platform: deviceMetadata['platform'],
+        osVersion: deviceMetadata['osVersion'],
+      );
+      
+      // Create Health Disclosure
+      final healthDisclosure = HealthDisclosure(
+        hasSkinConditions: _hasSkinConditions,
+        hasAllergies: _hasAllergies,
+        hasCurrentMedications: _hasCurrentMedications,
+        isPregnantOrBreastfeeding: _isPregnantOrBreastfeeding,
+        hasRecentCosmeticTreatments: _hasRecentCosmeticTreatments,
+        hasKnownReactions: _hasKnownReactions,
+        additionalNotes: _healthDisclosureNotesController.text.trim().isEmpty
+            ? null
+            : _healthDisclosureNotesController.text.trim(),
+      );
+      
+      // Create Required Acknowledgments
+      final requiredAcknowledgments = RequiredAcknowledgments(
+        understandsResultsNotGuaranteed: _understandsResultsNotGuaranteed,
+        understandsServicesNonMedical: _understandsServicesNonMedical,
+        agreesToFollowAftercare: _agreesToFollowAftercare,
+        acceptsInherentRisks: _acceptsInherentRisks,
+      );
       
       // Calculate total deposit for all services
       final totalDepositCents = _selectedServices.fold<int>(
@@ -621,7 +958,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
         // In a more complex system, you might want to split it proportionally
         final tipPerService = i == 0 ? _tipAmountCents : 0;
         
-        // Create appointment model
+        // Create appointment model with legal compliance data
         // If payments are disabled, payment intent ID will be null
         final appointment = AppointmentModel.create(
           serviceId: service.id,
@@ -637,6 +974,10 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
           stripePaymentIntentId: _paymentsEnabled ? _paymentIntentId : null, // Only set if payments enabled
           tipAmountCents: _paymentsEnabled ? tipPerService : 0, // Only set tip if payments enabled
           tipPaymentIntentId: (_paymentsEnabled && _tipAmountCents > 0) ? _paymentIntentId : null, // Only set if payments enabled and tip included
+          termsAcceptanceMetadata: termsAcceptanceMetadata,
+          healthDisclosure: healthDisclosure,
+          requiredAcknowledgments: requiredAcknowledgments,
+          cancellationPolicyAcknowledged: _cancellationPolicyAcknowledged,
         );
         
         // Create appointment in Firestore
@@ -1493,6 +1834,8 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                 _focusedDay = focusedDay;
                 _selectedTime = null; // Reset time when date changes
               });
+              // Filter available time slots when date changes
+              _filterAvailableTimeSlots();
             },
             calendarFormat: CalendarFormat.month,
             startingDayOfWeek: StartingDayOfWeek.monday,
@@ -1536,10 +1879,41 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: _availableTimeSlots.map((time) {
+          if (_isLoadingAvailability)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24.0),
+                child: CircularProgressIndicator(),
+              ),
+            )
+          else if (_filteredAvailableTimeSlots.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.errorRed.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.errorRed.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: AppColors.errorRed, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'No available time slots for this date. Please select a different date.',
+                      style: AppTypography.bodyMedium.copyWith(
+                        color: AppColors.errorRed,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: _filteredAvailableTimeSlots.map((time) {
               final isSelected = _selectedTime == time;
               return InkWell(
                 onTap: () {
@@ -1705,6 +2079,22 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
             ),
             maxLength: AppConstants.maxNotesLength,
           ),
+          const SizedBox(height: 32),
+          
+          // MARK: - Health Disclosure Section
+          _buildHealthDisclosureSection(),
+          const SizedBox(height: 32),
+          
+          // MARK: - Required Acknowledgments Section
+          _buildRequiredAcknowledgmentsSection(),
+          const SizedBox(height: 32),
+          
+          // MARK: - Terms & Conditions Section
+          _buildTermsAndConditionsSection(),
+          const SizedBox(height: 32),
+          
+          // MARK: - Cancellation Policy Acknowledgment
+          _buildCancellationPolicySection(),
           const SizedBox(height: 24),
           
           // Booking Summary
@@ -1843,6 +2233,424 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+  
+  // MARK: - Health Disclosure Section
+  /// Build health disclosure section with checkboxes
+  Widget _buildHealthDisclosureSection() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+        border: Border.all(color: AppColors.shadowColor),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.shadowColor,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Health & Skin Disclosure',
+            style: AppTypography.titleLarge.copyWith(
+              color: AppColors.darkBrown,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Please disclose any relevant health information to ensure safe treatment',
+            style: AppTypography.bodySmall.copyWith(
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          _buildHealthCheckbox(
+            'Skin conditions (acne, rosacea, eczema, psoriasis)',
+            _hasSkinConditions,
+            (value) => setState(() => _hasSkinConditions = value ?? false),
+          ),
+          const SizedBox(height: 12),
+          _buildHealthCheckbox(
+            'Allergies or sensitivities',
+            _hasAllergies,
+            (value) => setState(() => _hasAllergies = value ?? false),
+          ),
+          const SizedBox(height: 12),
+          _buildHealthCheckbox(
+            'Current medications (topical or oral)',
+            _hasCurrentMedications,
+            (value) => setState(() => _hasCurrentMedications = value ?? false),
+          ),
+          const SizedBox(height: 12),
+          _buildHealthCheckbox(
+            'Pregnancy or breastfeeding',
+            _isPregnantOrBreastfeeding,
+            (value) => setState(() => _isPregnantOrBreastfeeding = value ?? false),
+          ),
+          const SizedBox(height: 12),
+          _buildHealthCheckbox(
+            'Recent cosmetic treatments (peels, injectables, laser)',
+            _hasRecentCosmeticTreatments,
+            (value) => setState(() => _hasRecentCosmeticTreatments = value ?? false),
+          ),
+          const SizedBox(height: 12),
+          _buildHealthCheckbox(
+            'Known reactions to skincare products',
+            _hasKnownReactions,
+            (value) => setState(() => _hasKnownReactions = value ?? false),
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _healthDisclosureNotesController,
+            maxLines: 3,
+            decoration: InputDecoration(
+              labelText: 'Additional Notes (Optional)',
+              hintText: 'Please provide any additional health information...',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+              ),
+            ),
+            maxLength: 500,
+          ),
+        ],
+      ),
+    );
+  }
+  
+  /// Build health disclosure checkbox
+  Widget _buildHealthCheckbox(String label, bool value, ValueChanged<bool?> onChanged) {
+    return CheckboxListTile(
+      title: Text(
+        label,
+        style: AppTypography.bodyMedium.copyWith(
+          color: AppColors.darkBrown,
+        ),
+      ),
+      value: value,
+      onChanged: onChanged,
+      activeColor: AppColors.sunflowerYellow,
+      checkColor: AppColors.darkBrown,
+      contentPadding: EdgeInsets.zero,
+    );
+  }
+  
+  // MARK: - Required Acknowledgments Section
+  /// Build required acknowledgments section
+  Widget _buildRequiredAcknowledgmentsSection() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+        border: Border.all(color: AppColors.shadowColor),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.shadowColor,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Required Acknowledgments',
+            style: AppTypography.titleLarge.copyWith(
+              color: AppColors.darkBrown,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'All acknowledgments must be accepted to proceed',
+            style: AppTypography.bodySmall.copyWith(
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          _buildAcknowledgmentCheckbox(
+            'I understand results are not guaranteed',
+            _understandsResultsNotGuaranteed,
+            (value) => setState(() => _understandsResultsNotGuaranteed = value ?? false),
+          ),
+          const SizedBox(height: 12),
+          _buildAcknowledgmentCheckbox(
+            'I understand services are non-medical',
+            _understandsServicesNonMedical,
+            (value) => setState(() => _understandsServicesNonMedical = value ?? false),
+          ),
+          const SizedBox(height: 12),
+          _buildAcknowledgmentCheckbox(
+            'I agree to follow aftercare instructions',
+            _agreesToFollowAftercare,
+            (value) => setState(() => _agreesToFollowAftercare = value ?? false),
+          ),
+          const SizedBox(height: 12),
+          _buildAcknowledgmentCheckbox(
+            'I accept the inherent risks of esthetic services',
+            _acceptsInherentRisks,
+            (value) => setState(() => _acceptsInherentRisks = value ?? false),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  /// Build acknowledgment checkbox
+  Widget _buildAcknowledgmentCheckbox(String label, bool value, ValueChanged<bool?> onChanged) {
+    return CheckboxListTile(
+      title: Text(
+        label,
+        style: AppTypography.bodyMedium.copyWith(
+          color: AppColors.darkBrown,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      value: value,
+      onChanged: onChanged,
+      activeColor: AppColors.sunflowerYellow,
+      checkColor: AppColors.darkBrown,
+      contentPadding: EdgeInsets.zero,
+    );
+  }
+  
+  // MARK: - Terms & Conditions Section
+  /// Build Terms & Conditions acceptance section
+  Widget _buildTermsAndConditionsSection() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+        border: Border.all(
+          color: _termsAccepted ? AppColors.sunflowerYellow : AppColors.errorRed,
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.shadowColor,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Terms & Conditions',
+                  style: AppTypography.titleLarge.copyWith(
+                    color: AppColors.darkBrown,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    _showTermsModal = true;
+                  });
+                  _showTermsAndConditionsDialog();
+                },
+                child: Text(
+                  'View Full Terms',
+                  style: AppTypography.bodyMedium.copyWith(
+                    color: AppColors.sunflowerYellow,
+                    fontWeight: FontWeight.bold,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          CheckboxListTile(
+            title: Text(
+              TermsAndConditions.consentText,
+              style: AppTypography.bodyMedium.copyWith(
+                color: AppColors.darkBrown,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            value: _termsAccepted,
+            onChanged: (value) {
+              setState(() {
+                _termsAccepted = value ?? false;
+              });
+            },
+            activeColor: AppColors.sunflowerYellow,
+            checkColor: AppColors.darkBrown,
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+          ),
+          if (!_termsAccepted)
+            Padding(
+              padding: const EdgeInsets.only(top: 8, left: 40),
+              child: Text(
+                'You must accept the Terms & Conditions to proceed',
+                style: AppTypography.bodySmall.copyWith(
+                  color: AppColors.errorRed,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+  
+  /// Show Terms & Conditions dialog
+  void _showTermsAndConditionsDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+        ),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 600, maxHeight: 600),
+          child: Column(
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppColors.sunflowerYellow,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(AppConstants.defaultBorderRadius),
+                    topRight: Radius.circular(AppConstants.defaultBorderRadius),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Terms & Conditions',
+                        style: AppTypography.titleLarge.copyWith(
+                          color: AppColors.darkBrown,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        setState(() {
+                          _showTermsModal = false;
+                        });
+                      },
+                      color: AppColors.darkBrown,
+                    ),
+                  ],
+                ),
+              ),
+              // Content
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Text(
+                    TermsAndConditions.fullText,
+                    style: AppTypography.bodyMedium.copyWith(
+                      color: AppColors.darkBrown,
+                      height: 1.5,
+                    ),
+                  ),
+                ),
+              ),
+              // Footer
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(color: AppColors.shadowColor),
+                  ),
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      setState(() {
+                        _showTermsModal = false;
+                        _termsAccepted = true;
+                      });
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.sunflowerYellow,
+                      foregroundColor: AppColors.darkBrown,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    child: Text(
+                      'I Accept',
+                      style: AppTypography.buttonText.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  
+  // MARK: - Cancellation Policy Section
+  /// Build cancellation policy acknowledgment section
+  Widget _buildCancellationPolicySection() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+        border: Border.all(color: AppColors.shadowColor),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.shadowColor,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: CheckboxListTile(
+        title: Text(
+          'I understand and agree to the cancellation and no-show policy',
+          style: AppTypography.bodyMedium.copyWith(
+            color: AppColors.darkBrown,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(
+            'Cancellations must be made at least 24 hours in advance. No-shows may result in forfeiture of deposit.',
+            style: AppTypography.bodySmall,
+          ),
+        ),
+        value: _cancellationPolicyAcknowledged,
+        onChanged: (value) {
+          setState(() {
+            _cancellationPolicyAcknowledged = value ?? false;
+          });
+        },
+        activeColor: AppColors.sunflowerYellow,
+        checkColor: AppColors.darkBrown,
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
       ),
     );
   }

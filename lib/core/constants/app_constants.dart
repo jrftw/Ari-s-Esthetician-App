@@ -96,6 +96,9 @@ class AppConstants {
   
   /// Software enhancements collection name
   static const String firestoreSoftwareEnhancementsCollection = "software_enhancements";
+  
+  /// Time-off collection name
+  static const String firestoreTimeOffCollection = "time_off";
 
   // MARK: - Storage Paths
   /// Logo storage path
@@ -146,6 +149,9 @@ class AppConstants {
   
   /// Admin software enhancements route
   static const String routeAdminSoftwareEnhancements = "/admin/software-enhancements";
+  
+  /// Admin time-off route
+  static const String routeAdminTimeOff = "/admin/time-off";
   
   /// General settings route (accessible to all users)
   static const String routeSettings = "/settings";

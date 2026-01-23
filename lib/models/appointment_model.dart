@@ -121,6 +121,22 @@ class AppointmentModel extends Equatable {
   /// Admin notes (internal use only)
   final String? adminNotes;
 
+  // MARK: - Legal Compliance Fields
+  /// Terms & Conditions acceptance metadata
+  @JsonKey(toJson: _termsMetadataToJson, fromJson: _termsMetadataFromJson)
+  final TermsAcceptanceMetadata? termsAcceptanceMetadata;
+  
+  /// Client health disclosure information
+  @JsonKey(toJson: _healthDisclosureToJson, fromJson: _healthDisclosureFromJson)
+  final HealthDisclosure? healthDisclosure;
+  
+  /// Required acknowledgment flags
+  @JsonKey(toJson: _requiredAcknowledgmentsToJson, fromJson: _requiredAcknowledgmentsFromJson)
+  final RequiredAcknowledgments? requiredAcknowledgments;
+  
+  /// Cancellation and deposit policy acknowledgment
+  final bool cancellationPolicyAcknowledged;
+
   // MARK: - Constructor
   const AppointmentModel({
     required this.id,
@@ -149,6 +165,10 @@ class AppointmentModel extends Equatable {
     this.reminderEmailSentAt,
     this.dayOfReminderEmailSentAt,
     this.adminNotes,
+    this.termsAcceptanceMetadata,
+    this.healthDisclosure,
+    this.requiredAcknowledgments,
+    this.cancellationPolicyAcknowledged = false,
   });
 
   // MARK: - Factory Constructors
@@ -180,6 +200,10 @@ class AppointmentModel extends Equatable {
     String? stripePaymentIntentId,
     int tipAmountCents = 0,
     String? tipPaymentIntentId,
+    TermsAcceptanceMetadata? termsAcceptanceMetadata,
+    HealthDisclosure? healthDisclosure,
+    RequiredAcknowledgments? requiredAcknowledgments,
+    bool cancellationPolicyAcknowledged = false,
   }) {
     final now = DateTime.now();
     final endTime = startTime.add(Duration(minutes: durationMinutes));
@@ -204,6 +228,10 @@ class AppointmentModel extends Equatable {
       calendarSynced: false,
       createdAt: now,
       updatedAt: now,
+      termsAcceptanceMetadata: termsAcceptanceMetadata,
+      healthDisclosure: healthDisclosure,
+      requiredAcknowledgments: requiredAcknowledgments,
+      cancellationPolicyAcknowledged: cancellationPolicyAcknowledged,
     );
   }
 
@@ -305,6 +333,10 @@ class AppointmentModel extends Equatable {
     DateTime? reminderEmailSentAt,
     DateTime? dayOfReminderEmailSentAt,
     String? adminNotes,
+    TermsAcceptanceMetadata? termsAcceptanceMetadata,
+    HealthDisclosure? healthDisclosure,
+    RequiredAcknowledgments? requiredAcknowledgments,
+    bool? cancellationPolicyAcknowledged,
   }) {
     return AppointmentModel(
       id: id ?? this.id,
@@ -333,6 +365,10 @@ class AppointmentModel extends Equatable {
       reminderEmailSentAt: reminderEmailSentAt ?? this.reminderEmailSentAt,
       dayOfReminderEmailSentAt: dayOfReminderEmailSentAt ?? this.dayOfReminderEmailSentAt,
       adminNotes: adminNotes ?? this.adminNotes,
+      termsAcceptanceMetadata: termsAcceptanceMetadata ?? this.termsAcceptanceMetadata,
+      healthDisclosure: healthDisclosure ?? this.healthDisclosure,
+      requiredAcknowledgments: requiredAcknowledgments ?? this.requiredAcknowledgments,
+      cancellationPolicyAcknowledged: cancellationPolicyAcknowledged ?? this.cancellationPolicyAcknowledged,
     );
   }
 
@@ -365,6 +401,10 @@ class AppointmentModel extends Equatable {
         reminderEmailSentAt,
         dayOfReminderEmailSentAt,
         adminNotes,
+        termsAcceptanceMetadata,
+        healthDisclosure,
+        requiredAcknowledgments,
+        cancellationPolicyAcknowledged,
       ];
 
   // MARK: - Timestamp Helpers
@@ -400,6 +440,206 @@ class AppointmentModel extends Equatable {
     if (serviceModel == null) return null;
     return serviceModel.toJson();
   }
+
+  // MARK: - Legal Compliance Field Helpers
+  /// Convert TermsAcceptanceMetadata to JSON Map
+  static dynamic _termsMetadataToJson(TermsAcceptanceMetadata? metadata) {
+    if (metadata == null) return null;
+    return metadata.toJson();
+  }
+
+  /// Convert JSON Map to TermsAcceptanceMetadata
+  static TermsAcceptanceMetadata? _termsMetadataFromJson(dynamic json) {
+    if (json == null) return null;
+    if (json is Map<String, dynamic>) {
+      return TermsAcceptanceMetadata.fromJson(json);
+    }
+    return null;
+  }
+
+  /// Convert HealthDisclosure to JSON Map
+  static dynamic _healthDisclosureToJson(HealthDisclosure? disclosure) {
+    if (disclosure == null) return null;
+    return disclosure.toJson();
+  }
+
+  /// Convert JSON Map to HealthDisclosure
+  static HealthDisclosure? _healthDisclosureFromJson(dynamic json) {
+    if (json == null) return null;
+    if (json is Map<String, dynamic>) {
+      return HealthDisclosure.fromJson(json);
+    }
+    return null;
+  }
+
+  /// Convert RequiredAcknowledgments to JSON Map
+  static dynamic _requiredAcknowledgmentsToJson(RequiredAcknowledgments? acknowledgments) {
+    if (acknowledgments == null) return null;
+    return acknowledgments.toJson();
+  }
+
+  /// Convert JSON Map to RequiredAcknowledgments
+  static RequiredAcknowledgments? _requiredAcknowledgmentsFromJson(dynamic json) {
+    if (json == null) return null;
+    if (json is Map<String, dynamic>) {
+      return RequiredAcknowledgments.fromJson(json);
+    }
+    return null;
+  }
+}
+
+// MARK: - Terms Acceptance Metadata
+/// Metadata for Terms & Conditions electronic acceptance
+/// Stores verifiable audit data for legal compliance
+@JsonSerializable()
+class TermsAcceptanceMetadata extends Equatable {
+  /// Whether terms were accepted
+  final bool termsAccepted;
+  
+  /// UTC timestamp when terms were accepted
+  @JsonKey(fromJson: AppointmentModel._timestampFromJson, toJson: AppointmentModel._timestampToJson)
+  final DateTime termsAcceptedAtUtc;
+  
+  /// Local timestamp when terms were accepted
+  @JsonKey(fromJson: AppointmentModel._timestampFromJson, toJson: AppointmentModel._timestampToJson)
+  final DateTime termsAcceptedAtLocal;
+  
+  /// IP address of client (best-effort, may be null)
+  final String? ipAddress;
+  
+  /// User agent / device information
+  final String? userAgent;
+  
+  /// Platform information (iOS, Android, Web)
+  final String? platform;
+  
+  /// Operating system version
+  final String? osVersion;
+
+  const TermsAcceptanceMetadata({
+    required this.termsAccepted,
+    required this.termsAcceptedAtUtc,
+    required this.termsAcceptedAtLocal,
+    this.ipAddress,
+    this.userAgent,
+    this.platform,
+    this.osVersion,
+  });
+
+  factory TermsAcceptanceMetadata.fromJson(Map<String, dynamic> json) =>
+      _$TermsAcceptanceMetadataFromJson(json);
+
+  Map<String, dynamic> toJson() => _$TermsAcceptanceMetadataToJson(this);
+
+  @override
+  List<Object?> get props => [
+        termsAccepted,
+        termsAcceptedAtUtc,
+        termsAcceptedAtLocal,
+        ipAddress,
+        userAgent,
+        platform,
+        osVersion,
+      ];
+}
+
+// MARK: - Health Disclosure
+/// Client health and skin disclosure information
+/// Required for esthetician services to ensure safe treatment
+@JsonSerializable()
+class HealthDisclosure extends Equatable {
+  /// Skin conditions (acne, rosacea, eczema, psoriasis)
+  final bool hasSkinConditions;
+  
+  /// Allergies or sensitivities
+  final bool hasAllergies;
+  
+  /// Current medications (topical or oral)
+  final bool hasCurrentMedications;
+  
+  /// Pregnancy or breastfeeding status
+  final bool isPregnantOrBreastfeeding;
+  
+  /// Recent cosmetic treatments (peels, injectables, laser)
+  final bool hasRecentCosmeticTreatments;
+  
+  /// Known reactions to skincare products
+  final bool hasKnownReactions;
+  
+  /// Optional free-text notes for additional disclosure
+  final String? additionalNotes;
+
+  const HealthDisclosure({
+    required this.hasSkinConditions,
+    required this.hasAllergies,
+    required this.hasCurrentMedications,
+    required this.isPregnantOrBreastfeeding,
+    required this.hasRecentCosmeticTreatments,
+    required this.hasKnownReactions,
+    this.additionalNotes,
+  });
+
+  factory HealthDisclosure.fromJson(Map<String, dynamic> json) =>
+      _$HealthDisclosureFromJson(json);
+
+  Map<String, dynamic> toJson() => _$HealthDisclosureToJson(this);
+
+  @override
+  List<Object?> get props => [
+        hasSkinConditions,
+        hasAllergies,
+        hasCurrentMedications,
+        isPregnantOrBreastfeeding,
+        hasRecentCosmeticTreatments,
+        hasKnownReactions,
+        additionalNotes,
+      ];
+}
+
+// MARK: - Required Acknowledgments
+/// Required acknowledgment checkboxes for legal compliance
+/// All must be true for booking submission
+@JsonSerializable()
+class RequiredAcknowledgments extends Equatable {
+  /// I understand results are not guaranteed
+  final bool understandsResultsNotGuaranteed;
+  
+  /// I understand services are non-medical
+  final bool understandsServicesNonMedical;
+  
+  /// I agree to follow aftercare instructions
+  final bool agreesToFollowAftercare;
+  
+  /// I accept the inherent risks of esthetic services
+  final bool acceptsInherentRisks;
+
+  const RequiredAcknowledgments({
+    required this.understandsResultsNotGuaranteed,
+    required this.understandsServicesNonMedical,
+    required this.agreesToFollowAftercare,
+    required this.acceptsInherentRisks,
+  });
+
+  factory RequiredAcknowledgments.fromJson(Map<String, dynamic> json) =>
+      _$RequiredAcknowledgmentsFromJson(json);
+
+  Map<String, dynamic> toJson() => _$RequiredAcknowledgmentsToJson(this);
+
+  /// Check if all required acknowledgments are true
+  bool get allAcknowledged {
+    return understandsResultsNotGuaranteed &&
+        understandsServicesNonMedical &&
+        agreesToFollowAftercare &&
+        acceptsInherentRisks;
+  }
+
+  @override
+  List<Object?> get props => [
+        understandsResultsNotGuaranteed,
+        understandsServicesNonMedical,
+        agreesToFollowAftercare,
+        acceptsInherentRisks,
+      ];
 }
 
 // Suggestions For Features and Additions Later:
