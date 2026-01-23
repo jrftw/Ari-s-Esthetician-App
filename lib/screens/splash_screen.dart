@@ -15,6 +15,7 @@ import '../core/constants/app_colors.dart';
 import '../core/constants/app_typography.dart';
 import '../core/logging/app_logger.dart';
 import '../../services/auth_service.dart';
+import '../../services/view_mode_service.dart';
 
 // MARK: - Splash Screen
 /// Initial screen displayed while checking authentication state
@@ -60,6 +61,11 @@ class _SplashScreenState extends State<SplashScreen> {
       logLoading('Checking admin status...', tag: 'SplashScreen');
       final isAdmin = await authService.isAdmin();
       logAuth('Admin status: $isAdmin', tag: 'SplashScreen');
+      
+      // Initialize view mode service
+      final viewModeService = ViewModeService.instance;
+      await viewModeService.initialize(isAdmin: isAdmin);
+      logInfo('View mode service initialized', tag: 'SplashScreen');
       
       if (isAdmin) {
         logRouter('Navigating to /admin', tag: 'SplashScreen');

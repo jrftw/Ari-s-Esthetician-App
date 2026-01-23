@@ -282,6 +282,133 @@ class FirestoreService {
     }
   }
 
+  /// Delete appointment
+  Future<void> deleteAppointment(String appointmentId) async {
+    try {
+      await _firestore
+          .collection(AppConstants.firestoreAppointmentsCollection)
+          .doc(appointmentId)
+          .delete();
+
+      AppLogger().logInfo('Appointment deleted: $appointmentId', tag: 'FirestoreService');
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to delete appointment',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Get appointments stream (real-time updates)
+  Stream<List<AppointmentModel>> getAppointmentsStream({
+    DateTime? startDate,
+    DateTime? endDate,
+    AppointmentStatus? status,
+  }) {
+    try {
+      Query query = _firestore
+          .collection(AppConstants.firestoreAppointmentsCollection)
+          .orderBy('startTime', descending: false);
+
+      if (startDate != null) {
+        query = query.where('startTime', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate));
+      }
+
+      if (endDate != null) {
+        query = query.where('startTime', isLessThanOrEqualTo: Timestamp.fromDate(endDate));
+      }
+
+      if (status != null) {
+        query = query.where('status', isEqualTo: status.name);
+      }
+
+      return query.snapshots().map((snapshot) {
+        return snapshot.docs
+            .map((doc) => AppointmentModel.fromFirestore(doc))
+            .toList();
+      });
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to get appointments stream',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Get appointments by status
+  Future<List<AppointmentModel>> getAppointmentsByStatus(AppointmentStatus status) async {
+    try {
+      final snapshot = await _firestore
+          .collection(AppConstants.firestoreAppointmentsCollection)
+          .where('status', isEqualTo: status.name)
+          .orderBy('startTime')
+          .get();
+
+      return snapshot.docs
+          .map((doc) => AppointmentModel.fromFirestore(doc))
+          .toList();
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to get appointments by status',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Get appointments by client email
+  Future<List<AppointmentModel>> getAppointmentsByClientEmail(String email) async {
+    try {
+      final snapshot = await _firestore
+          .collection(AppConstants.firestoreAppointmentsCollection)
+          .where('clientEmail', isEqualTo: email)
+          .orderBy('startTime', descending: true)
+          .get();
+
+      return snapshot.docs
+          .map((doc) => AppointmentModel.fromFirestore(doc))
+          .toList();
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to get appointments by client email',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Get all appointments (for admin view)
+  Future<List<AppointmentModel>> getAllAppointments() async {
+    try {
+      final snapshot = await _firestore
+          .collection(AppConstants.firestoreAppointmentsCollection)
+          .orderBy('startTime', descending: true)
+          .get();
+
+      return snapshot.docs
+          .map((doc) => AppointmentModel.fromFirestore(doc))
+          .toList();
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to get all appointments',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
   // MARK: - Client Operations
   /// Get or create client by email
   Future<ClientModel> getOrCreateClient({

@@ -13,6 +13,8 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/logging/app_logger.dart';
+import '../../services/view_mode_service.dart';
 
 // MARK: - Admin Dashboard Screen
 /// Main admin dashboard showing overview and navigation
@@ -34,6 +36,10 @@ class AdminDashboardScreen extends StatelessWidget {
             style: AppTypography.titleLarge,
           ),
           const SizedBox(height: 16),
+          
+          // MARK: - View as Client Action
+          _buildViewAsClientCard(context),
+          const SizedBox(height: 8),
           
           // MARK: - Navigation Cards
           _buildNavCard(
@@ -73,6 +79,7 @@ class AdminDashboardScreen extends StatelessWidget {
   }
 
   // MARK: - Helper Widgets
+  /// Build navigation card for admin features
   Widget _buildNavCard(
     BuildContext context, {
     required String title,
@@ -88,6 +95,39 @@ class AdminDashboardScreen extends StatelessWidget {
         subtitle: Text(subtitle, style: AppTypography.bodySmall),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => context.push(route),
+      ),
+    );
+  }
+
+  /// Build "View as Client" quick action card
+  /// Allows admins to switch to client view to see the booking experience
+  Widget _buildViewAsClientCard(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      color: AppColors.sunflowerYellow.withOpacity(0.1),
+      child: ListTile(
+        leading: Icon(
+          Icons.visibility,
+          color: AppColors.sunflowerYellow,
+          size: 32,
+        ),
+        title: Text(
+          'View as Client',
+          style: AppTypography.titleMedium.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        subtitle: Text(
+          'See how clients experience the booking flow',
+          style: AppTypography.bodySmall,
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () {
+          logInfo('Admin switching to client view', tag: 'AdminDashboardScreen');
+          final viewModeService = ViewModeService.instance;
+          viewModeService.switchToClientView();
+          context.go(AppConstants.routeClientBooking);
+        },
       ),
     );
   }

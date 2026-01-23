@@ -141,7 +141,7 @@ class ClientModel extends Equatable {
 
   // MARK: - Conversion Methods
   /// Convert ClientModel to JSON
-  Map<String, dynamic> toJson() => _$ClientModelFromJson(this);
+  Map<String, dynamic> toJson() => _$ClientModelToJson(this);
 
   /// Convert ClientModel to Firestore document data
   Map<String, dynamic> toFirestore() {

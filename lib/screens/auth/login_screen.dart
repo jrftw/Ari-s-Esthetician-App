@@ -2,8 +2,8 @@
  * Filename: login_screen.dart
  * Purpose: Admin login screen for accessing admin dashboard
  * Author: Kevin Doyle Jr. / Infinitum Imagery LLC
- * Last Modified: 2024-01-XX
- * Dependencies: Flutter, go_router, auth_service
+ * Last Modified: 2025-01-22
+ * Dependencies: Flutter, go_router, auth_service, preferences_service
  * Platform Compatibility: iOS, Android, Web
  */
 
@@ -13,6 +13,8 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
 import '../../services/auth_service.dart';
+import '../../services/view_mode_service.dart';
+import '../../services/preferences_service.dart';
 import '../../core/logging/app_logger.dart';
 
 // MARK: - Login Screen
@@ -31,14 +33,49 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _authService = AuthService();
+  final _preferencesService = PreferencesService.instance;
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _rememberMe = false;
+  bool _keepSignedIn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedPreferences();
+  }
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  // MARK: - Load Saved Preferences
+  /// Load saved email and checkbox preferences
+  Future<void> _loadSavedPreferences() async {
+    try {
+      final savedEmail = await _preferencesService.getSavedEmail();
+      final rememberMe = await _preferencesService.getRememberMe();
+      final keepSignedIn = await _preferencesService.getKeepSignedIn();
+
+      if (mounted) {
+        setState(() {
+          if (savedEmail != null && rememberMe) {
+            _emailController.text = savedEmail;
+          }
+          _rememberMe = rememberMe;
+          _keepSignedIn = keepSignedIn;
+        });
+      }
+    } catch (e) {
+      AppLogger().logError(
+        'Failed to load saved preferences',
+        tag: 'LoginScreen',
+        error: e,
+      );
+    }
   }
 
   // MARK: - Login Handler
@@ -53,15 +90,28 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
+      final email = _emailController.text.trim();
+      final password = _passwordController.text;
+
+      // Sign in with email and password
       await _authService.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
+        email: email,
+        password: password,
+        keepSignedIn: _keepSignedIn,
       );
 
       if (!mounted) return;
 
+      // Save preferences based on checkboxes
+      await _saveLoginPreferences(email, password);
+
       // Check if user is admin and redirect accordingly
       final isAdmin = await _authService.isAdmin();
+      
+      // Initialize view mode service
+      final viewModeService = ViewModeService.instance;
+      await viewModeService.initialize(isAdmin: isAdmin);
+      
       if (isAdmin) {
         // Admin users go to admin dashboard
         context.go('/admin');
@@ -95,6 +145,43 @@ class _LoginScreenState extends State<LoginScreen> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  // MARK: - Save Login Preferences
+  /// Save login preferences based on checkbox states
+  Future<void> _saveLoginPreferences(String email, String password) async {
+    try {
+      // Save remember me preference
+      await _preferencesService.setRememberMe(_rememberMe);
+      
+      // Save keep signed in preference
+      await _preferencesService.setKeepSignedIn(_keepSignedIn);
+
+      if (_rememberMe) {
+        // Save email if remember me is checked
+        await _preferencesService.saveEmail(email);
+        // Optionally save password (less secure, but for convenience)
+        // Uncomment the line below if you want to save password too
+        // await _preferencesService.savePassword(password);
+      } else {
+        // Clear saved email if remember me is unchecked
+        await _preferencesService.clearSavedEmail();
+        await _preferencesService.clearSavedPassword();
+      }
+
+      // If keep signed in is unchecked, ensure we don't persist session
+      if (!_keepSignedIn) {
+        // Firebase Auth will handle session persistence automatically
+        // but we can clear the preference
+        AppLogger().logInfo('Keep signed in is disabled', tag: 'LoginScreen');
+      }
+    } catch (e) {
+      AppLogger().logError(
+        'Failed to save login preferences',
+        tag: 'LoginScreen',
+        error: e,
+      );
     }
   }
 
@@ -187,6 +274,62 @@ class _LoginScreenState extends State<LoginScreen> {
                     },
                   ),
                   
+                  const SizedBox(height: 16),
+                  
+                  // MARK: - Remember Me Checkbox
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: _rememberMe,
+                        onChanged: (value) {
+                          setState(() {
+                            _rememberMe = value ?? false;
+                          });
+                        },
+                      ),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _rememberMe = !_rememberMe;
+                            });
+                          },
+                          child: Text(
+                            'Remember Me',
+                            style: AppTypography.bodyMedium,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  // MARK: - Keep Me Signed In Checkbox
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: _keepSignedIn,
+                        onChanged: (value) {
+                          setState(() {
+                            _keepSignedIn = value ?? false;
+                          });
+                        },
+                      ),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _keepSignedIn = !_keepSignedIn;
+                            });
+                          },
+                          child: Text(
+                            'Keep Me Signed In',
+                            style: AppTypography.bodyMedium,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  
                   const SizedBox(height: 24),
                   
                   // MARK: - Login Button
@@ -237,6 +380,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
 // Suggestions For Features and Additions Later:
 // - Add "Forgot Password" functionality
-// - Add "Remember Me" option
 // - Add biometric authentication
 // - Add social login options
+// - Add password strength indicator
+// - Add account lockout after failed attempts

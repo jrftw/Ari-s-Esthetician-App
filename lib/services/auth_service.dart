@@ -38,19 +38,29 @@ class AuthService {
   // MARK: - Authentication Methods
   /// Sign in with email and password
   /// Returns the user if successful, throws exception on failure
+  /// [keepSignedIn] determines if the session should persist across app restarts
   Future<User?> signInWithEmailAndPassword({
     required String email,
     required String password,
+    bool keepSignedIn = true,
   }) async {
     try {
-      AppLogger().logInfo('Attempting to sign in: $email', tag: 'AuthService');
+      AppLogger().logInfo('Attempting to sign in: $email (keepSignedIn: $keepSignedIn)', tag: 'AuthService');
       
+      // Firebase Auth persists sessions by default
+      // The keepSignedIn parameter is used for preference tracking
+      // Firebase Auth will maintain the session automatically
       final userCredential = await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
 
       AppLogger().logInfo('Sign in successful: ${userCredential.user?.email}', tag: 'AuthService');
+      
+      // Note: Firebase Auth automatically persists sessions
+      // If keepSignedIn is false, the user can still sign out manually
+      // The session will persist until explicitly signed out
+      
       return userCredential.user;
     } on FirebaseAuthException catch (e, stackTrace) {
       AppLogger().logError(
@@ -102,6 +112,7 @@ class AuthService {
   }
 
   /// Sign out current user
+  /// Clears the Firebase Auth session
   Future<void> signOut() async {
     try {
       AppLogger().logInfo('Signing out user', tag: 'AuthService');
@@ -116,6 +127,15 @@ class AuthService {
       );
       rethrow;
     }
+  }
+
+  // MARK: - Session Management
+  /// Check if user session is persistent
+  /// Firebase Auth automatically persists sessions, this is informational
+  bool get isSessionPersistent {
+    // Firebase Auth persists sessions by default
+    // This method returns true if there's a current user
+    return _auth.currentUser != null;
   }
 
   /// Get user role from Firestore
@@ -189,4 +209,5 @@ class AuthService {
 // - Add phone number authentication
 // - Add email verification
 // - Add two-factor authentication
-// - Add session management
+// - Add session timeout handling
+// - Add automatic token refresh handling

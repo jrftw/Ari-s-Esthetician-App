@@ -40,15 +40,20 @@ service cloud.firestore {
     }
     
     // MARK: - Appointments Collection
-    /// Appointments - public create, admin read/write, own read
+    /// Appointments - public create, admin read/write, own read, recent read for confirmation
     match /appointments/{appointmentId} {
       // Allow public to create appointments (for booking)
       allow create: if true;
       
-      // Allow reading own appointment (by email match) or admin
+      // Allow reading appointments if:
+      // 1. User is admin
+      // 2. User is authenticated and email matches
+      // 3. Appointment was created recently (within 1 hour) - for guest confirmation screen
       allow read: if isAdmin() || 
         (isAuthenticated() && 
-         resource.data.clientEmail == request.auth.token.email);
+         resource.data.clientEmail == request.auth.token.email) ||
+        (resource.data.createdAt != null &&
+         resource.data.createdAt > request.time - duration.value(1, 'h'));
       
       // Only admin can update/delete appointments
       allow update, delete: if isAdmin();

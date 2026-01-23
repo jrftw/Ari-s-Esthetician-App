@@ -178,6 +178,17 @@ class AppRouter {
       logRouter('Admin user - allowing access', tag: 'AppRouter');
     }
 
+    // Allow admins to access client routes (for "view as client" feature)
+    // Client routes are public, but we log when admins access them
+    final isClientRoute = state.matchedLocation == AppConstants.routeClientBooking ||
+        state.matchedLocation.startsWith(AppConstants.routeClientConfirmation);
+    if (isClientRoute && user != null) {
+      final isAdmin = await _authService.isAdmin();
+      if (isAdmin) {
+        logRouter('Admin user accessing client route - allowing for view-as-client feature', tag: 'AppRouter');
+      }
+    }
+
     logRouter('Allowing navigation', tag: 'AppRouter');
     return null; // Allow navigation
   }
