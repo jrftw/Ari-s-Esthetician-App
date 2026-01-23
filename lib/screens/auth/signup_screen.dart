@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
+import '../../core/constants/app_version.dart';
 import '../../services/auth_service.dart';
 import '../../core/logging/app_logger.dart';
 
@@ -272,6 +273,38 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   TextButton(
                     onPressed: () => context.go('/booking'),
                     child: const Text('Continue as Guest'),
+                  ),
+                  
+                  const SizedBox(height: 32),
+                  
+                  // MARK: - Footer
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Version ${AppVersion.versionStringShort}',
+                        style: AppTypography.bodySmall.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '© ${DateTime.now().year} Copyright Arianna DeAngelis\nAll rights reserved',
+                        style: AppTypography.bodySmall.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Built in the USA 🇺🇸 with ❤️ by @jrftw',
+                        style: AppTypography.bodySmall.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                   ),
                 ],
               ),

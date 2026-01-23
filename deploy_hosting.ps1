@@ -22,6 +22,12 @@ Write-Host "========================================" -ForegroundColor Green
 Write-Host "Deploying to Firebase Hosting" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 
+# Add npm global directory to PATH if not already present
+$npmGlobalPath = "$env:APPDATA\npm"
+if ($env:Path -notlike "*$npmGlobalPath*") {
+    $env:Path += ";$npmGlobalPath"
+}
+
 # Check if Firebase CLI is installed
 $firebaseCmd = Get-Command firebase -ErrorAction SilentlyContinue
 if (-not $firebaseCmd) {
