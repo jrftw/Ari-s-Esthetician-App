@@ -13,6 +13,7 @@ import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
+import '../../core/constants/app_version.dart';
 import '../../core/logging/app_logger.dart';
 import '../../services/auth_service.dart';
 
@@ -353,6 +354,63 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
               ),
             ),
+            const SizedBox(height: 24),
+            // MARK: - Version Information
+            Divider(
+              color: AppColors.textSecondary.withOpacity(0.2),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  size: 16,
+                  color: AppColors.textSecondary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'App Version',
+                  style: AppTypography.bodySmall.copyWith(
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Version: ${AppVersion.version}',
+              style: AppTypography.bodySmall.copyWith(
+                color: AppColors.textSecondary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Build: ${AppVersion.buildNumberString}',
+              style: AppTypography.bodySmall.copyWith(
+                color: AppColors.textSecondary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Environment: ${AppVersion.environmentString.toUpperCase()}',
+              style: AppTypography.bodySmall.copyWith(
+                color: AppColors.textSecondary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              AppVersion.versionString,
+              style: AppTypography.bodySmall.copyWith(
+                color: AppColors.sunflowerYellow,
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
       ),
@@ -428,7 +486,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 }
 
 // Suggestions For Features and Additions Later:
-// - Add app version display
 // - Add theme toggle (light/dark mode)
 // - Add notification preferences
 // - Add language selection
