@@ -2,126 +2,118 @@
 <html>
 <head>
   <!--
-    If you are serving your web app in a path other than the root,
-    change the href value below to reflect the base path you are
-    serving from.
-
-    The path provided below has to start and end with a slash "/" in
-    order for it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the
-    value of the `--base-href` argument provided to `flutter build`.
+    Filename: index.html
+    Purpose: Flutter web application entry point and initialization
+    Author: Kevin Doyle Jr. / Infinitum Imagery LLC
+    Last Modified: 2024-01-XX
+    Dependencies: Flutter web engine
+    Platform Compatibility: Web browsers (Chrome, Firefox, Safari, Edge)
   -->
+  
   <base href="$FLUTTER_BASE_HREF">
-
+  
+  <!-- MARK: - Meta Tags -->
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Ari's Esthetician App - Book your appointment online">
-
-  <!-- iOS meta tags & icons -->
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="Ari's Esthetician">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
-
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
-
+  
   <title>Ari's Esthetician App</title>
-  <link rel="manifest" href="manifest.json">
-
+  
+  <!-- MARK: - Loading Indicator Styles -->
+  <style>
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    #loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      width: 100vw;
+      background-color: #FFF8E7;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      position: fixed;
+      top: 0;
+      left: 0;
+      z-index: 9999;
+    }
+    #loading-spinner {
+      width: 80px;
+      height: 80px;
+      border: 4px solid #F5F5F5;
+      border-top: 4px solid #F4C430;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    #loading-text {
+      margin-top: 20px;
+      color: #5D4037;
+      font-size: 16px;
+    }
+  </style>
+  
+  <!-- MARK: - Error Handling Scripts -->
   <script>
-    // Debug logging
-    console.log('🔍 HTML loaded - Flutter scripts starting...');
+    console.log('🔍 HTML loaded');
     
-    // Global error handler
-    window.addEventListener('error', function(event) {
-      console.error('🔍 ❌ GLOBAL ERROR:', event.error);
-      console.error('🔍 Error message:', event.message);
-      console.error('🔍 Error source:', event.filename, ':', event.lineno);
+    window.addEventListener('error', function(e) {
+      console.error('🔍 ❌ ERROR:', e.error, e.message, e.filename, e.lineno);
     });
     
-    // Unhandled promise rejection handler
-    window.addEventListener('unhandledrejection', function(event) {
-      console.error('🔍 ❌ UNHANDLED PROMISE REJECTION:', event.reason);
+    window.addEventListener('unhandledrejection', function(e) {
+      console.error('🔍 ❌ UNHANDLED REJECTION:', e.reason);
     });
   </script>
-  
-  <!-- Standard Flutter web initialization -->
-  <script src="flutter.js" defer></script>
 </head>
 <body>
+  <!-- MARK: - Loading Indicator -->
+  <div id="loading">
+    <div id="loading-spinner"></div>
+    <p id="loading-text">Loading Ari's Esthetician App...</p>
+  </div>
+  
+  <!-- MARK: - Flutter Initialization -->
   <script>
-    console.log('🔍 Body script executing...');
+    console.log('🔍 Body loaded');
+    console.log('🔍 Waiting for Flutter to initialize...');
+    console.log('🔍 Once Flutter starts, check your TERMINAL for emoji logs!');
     
-    window.addEventListener('load', function() {
-      console.log('🔍 Window load event fired');
-      console.log('🔍 Waiting for Flutter to initialize...');
-      
-      // Wait for Flutter to fully set up buildConfig
-      // DO NOT manually set buildConfig - let Flutter's dev server do it
-      function waitForFlutterReady() {
-        if (typeof _flutter === 'undefined') {
-          console.log('🔍 Waiting for _flutter...');
-          setTimeout(waitForFlutterReady, 100);
-          return;
-        }
-        
-        console.log('🔍 _flutter found');
-        console.log('🔍 _flutter keys:', Object.keys(_flutter));
-        
-        // Check if buildConfig exists (it should be set by Flutter's dev server)
-        if (!_flutter.buildConfig) {
-          console.log('🔍 ⚠️ buildConfig not yet set, waiting...');
-          // Wait for Flutter's dev server to set it
-          setTimeout(waitForFlutterReady, 100);
-          return;
-        }
-        
-        console.log('🔍 ✅ buildConfig is available');
-        console.log('🔍 buildConfig keys:', Object.keys(_flutter.buildConfig));
-        
-        // Now it's safe to call load()
-        if (_flutter.loader && _flutter.loader.load) {
-          console.log('🔍 Calling _flutter.loader.load()...');
-          try {
-            _flutter.loader.load({
-              onEntrypointLoaded: function(engineInitializer) {
-                console.log('🔍 ✅ Entrypoint loaded!');
-                engineInitializer.initializeEngine().then(function(appRunner) {
-                  console.log('🔍 ✅ Engine initialized!');
-                  appRunner.runApp();
-                  console.log('🔍 ✅ App running!');
-                }).catch(function(error) {
-                  console.error('🔍 ❌ ERROR initializing engine:', error);
-                  document.body.innerHTML = '<div style="padding: 20px; font-family: Arial; color: red;"><h1>Error Initializing Flutter Engine</h1><p>' + error.toString() + '</p></div>';
-                });
-              },
-              onError: function(error) {
-                console.error('🔍 ❌ ERROR loading entrypoint:', error);
-                document.body.innerHTML = '<div style="padding: 20px; font-family: Arial; color: red;"><h1>Error Loading Flutter App</h1><p>' + error.toString() + '</p></div>';
-              }
-            });
-          } catch (error) {
-            console.error('🔍 ❌ ERROR in load() call:', error);
-            console.error('🔍 Error details:', error.message, error.stack);
-            document.body.innerHTML = '<div style="padding: 20px; font-family: Arial; color: red;"><h1>Error Loading Flutter</h1><p>' + error.toString() + '</p></div>';
-          }
-        } else {
-          console.error('🔍 ❌ _flutter.loader or load() not found');
-          document.body.innerHTML = '<div style="padding: 20px; font-family: Arial; color: red;"><h1>Flutter Loader Not Available</h1></div>';
-        }
+    function removeLoading() {
+      var loading = document.getElementById('loading');
+      if (loading) {
+        loading.style.opacity = '0';
+        loading.style.transition = 'opacity 0.3s';
+        setTimeout(function() {
+          loading.remove();
+          console.log('🔍 ✅ Loading screen removed');
+        }, 300);
       }
-      
-      // Start waiting
-      waitForFlutterReady();
+    }
+    
+    // Remove loading when Flutter renders
+    window.addEventListener('flutter-first-frame', function() {
+      console.log('🔍 ✅ Flutter first frame rendered!');
+      console.log('🔍 📺 App is now visible in browser');
+      console.log('🔍 📝 Check your TERMINAL for detailed emoji logs from main.dart');
+      removeLoading();
     });
     
-    console.log('🔍 Event listeners registered');
+    // Fallback timeout
+    setTimeout(function() {
+      var loading = document.getElementById('loading');
+      if (loading) {
+        console.warn('🔍 ⚠️ Flutter first frame not received after 15s');
+        console.warn('🔍 Check browser console (F12) and terminal for errors');
+        removeLoading();
+      }
+    }, 15000);
   </script>
+  
+  <!-- MARK: - Flutter Bootstrap Script -->
+  <!-- Standard Flutter web initialization - works with both dev and production -->
+  <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

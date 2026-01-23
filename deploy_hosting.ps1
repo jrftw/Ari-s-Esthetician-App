@@ -22,6 +22,20 @@ Write-Host "========================================" -ForegroundColor Green
 Write-Host "Deploying to Firebase Hosting" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 
+# Check if Firebase CLI is installed
+$firebaseCmd = Get-Command firebase -ErrorAction SilentlyContinue
+if (-not $firebaseCmd) {
+    Write-Host "❌ Firebase CLI is not installed or not in PATH!" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "To install Firebase CLI, run:" -ForegroundColor Yellow
+    Write-Host "  npm install -g firebase-tools" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "Then login to Firebase:" -ForegroundColor Yellow
+    Write-Host "  firebase login" -ForegroundColor Cyan
+    Write-Host ""
+    exit 1
+}
+
 # Deploy to Firebase Hosting
 firebase deploy --only hosting
 
