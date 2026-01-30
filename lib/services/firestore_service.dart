@@ -1398,13 +1398,14 @@ class FirestoreService {
   }
 
   /// Check if a time slot is available (not blocked by time-off, appointments, or outside working hours)
+  /// When business settings are missing (e.g. no Firestore document), only overlap and time-off are checked.
   Future<bool> isTimeSlotAvailable(
     DateTime startTime,
     DateTime endTime,
   ) async {
     try {
       // MARK: - Business Working Hours Check
-      // First check if the time slot is within business working hours
+      // When getBusinessSettings() returns null (no document), skip this block so slots are only filtered by overlap/time-off.
       final businessSettings = await getBusinessSettings();
       if (businessSettings != null) {
         // Get day of week (0 = Sunday, 6 = Saturday)

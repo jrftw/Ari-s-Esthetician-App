@@ -2,7 +2,7 @@
  * Filename: login_screen.dart
  * Purpose: Admin login screen for accessing admin dashboard
  * Author: Kevin Doyle Jr. / Infinitum Imagery LLC
- * Last Modified: 2025-01-22
+ * Last Modified: 2026-01-30
  * Dependencies: Flutter, go_router, auth_service, preferences_service
  * Platform Compatibility: iOS, Android, Web
  */
@@ -283,60 +283,55 @@ class _LoginScreenState extends State<LoginScreen> {
                     },
                   ),
                   
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 8),
                   
                   // MARK: - Remember Me Checkbox
-                  Row(
-                    children: [
-                      Checkbox(
-                        value: _rememberMe,
-                        onChanged: (value) {
-                          setState(() {
-                            _rememberMe = value ?? false;
-                          });
-                        },
-                      ),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _rememberMe = !_rememberMe;
-                            });
-                          },
-                          child: Text(
-                            'Remember Me',
-                            style: AppTypography.bodyMedium,
-                          ),
-                        ),
-                      ),
-                    ],
+                  /// CheckboxListTile ensures the entire row is tappable and state updates reliably on all platforms (iOS, Android, Web).
+                  /// State is persisted immediately on toggle so the choice is saved even if the user navigates away without logging in.
+                  CheckboxListTile(
+                    value: _rememberMe,
+                    onChanged: (bool? value) {
+                      final newValue = value ?? false;
+                      setState(() {
+                        _rememberMe = newValue;
+                      });
+                      _preferencesService.setRememberMe(newValue);
+                      if (!newValue) {
+                        _preferencesService.clearSavedEmail();
+                        _preferencesService.clearSavedPassword();
+                      }
+                      AppLogger().logInfo('Remember Me toggled: $newValue', tag: 'LoginScreen');
+                    },
+                    title: Text(
+                      'Remember Me',
+                      style: AppTypography.bodyMedium,
+                    ),
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    activeColor: AppColors.sunflowerYellow,
+                    checkColor: AppColors.darkBrown,
                   ),
                   
                   // MARK: - Keep Me Signed In Checkbox
-                  Row(
-                    children: [
-                      Checkbox(
-                        value: _keepSignedIn,
-                        onChanged: (value) {
-                          setState(() {
-                            _keepSignedIn = value ?? false;
-                          });
-                        },
-                      ),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _keepSignedIn = !_keepSignedIn;
-                            });
-                          },
-                          child: Text(
-                            'Keep Me Signed In',
-                            style: AppTypography.bodyMedium,
-                          ),
-                        ),
-                      ),
-                    ],
+                  /// CheckboxListTile ensures the entire row is tappable. State persisted immediately on toggle.
+                  CheckboxListTile(
+                    value: _keepSignedIn,
+                    onChanged: (bool? value) {
+                      final newValue = value ?? false;
+                      setState(() {
+                        _keepSignedIn = newValue;
+                      });
+                      _preferencesService.setKeepSignedIn(newValue);
+                      AppLogger().logInfo('Keep Me Signed In toggled: $newValue', tag: 'LoginScreen');
+                    },
+                    title: Text(
+                      'Keep Me Signed In',
+                      style: AppTypography.bodyMedium,
+                    ),
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    activeColor: AppColors.sunflowerYellow,
+                    checkColor: AppColors.darkBrown,
                   ),
                   
                   const SizedBox(height: 24),

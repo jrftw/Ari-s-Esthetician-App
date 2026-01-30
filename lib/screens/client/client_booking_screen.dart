@@ -2,7 +2,7 @@
  * Filename: client_booking_screen.dart
  * Purpose: Complete booking experience with service selection, date/time picker, client form, and payment
  * Author: Kevin Doyle Jr. / Infinitum Imagery LLC
- * Last Modified: 2024-01-XX
+ * Last Modified: 2026-01-30
  * Dependencies: Flutter, services, models, table_calendar, flutter_datetime_picker_plus, flutter_stripe, go_router
  * Platform Compatibility: iOS, Android, Web
  */
@@ -30,7 +30,6 @@ import '../../services/payment_service.dart';
 import '../../services/email_service.dart';
 import '../../services/device_metadata_service.dart';
 import '../../core/constants/terms_and_conditions.dart';
-import '../../models/appointment_model.dart';
 import 'client_confirmation_screen.dart';
 
 // MARK: - Booking Step Enum
@@ -372,6 +371,19 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
     logInfo('Generated ${_availableTimeSlots.length} time slots from business hours', tag: 'ClientBookingScreen');
   }
   
+  /// Default working hours when business settings are missing or a day has no configured hours.
+  /// Sunday (0) and Saturday (6) closed; Monday (1)–Friday (5) 08:00–17:30.
+  /// Ensures users see time slots when Firestore has no business_settings document or weeklyHours is empty.
+  BusinessHoursModel? _getDefaultHoursForDay(int dayOfWeek) {
+    if (dayOfWeek < 0 || dayOfWeek > 6) return null;
+    final isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
+    return BusinessHoursModel(
+      dayOfWeek: dayOfWeek,
+      isOpen: isWeekday,
+      timeSlots: isWeekday ? ['08:00', '17:30'] : [],
+    );
+  }
+
   /// Filter available time slots based on business working hours, booked appointments, and time-off
   Future<void> _filterAvailableTimeSlots() async {
     if (_selectedDate == null) {
@@ -388,16 +400,21 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
     try {
       logLoading('Filtering available time slots...', tag: 'ClientBookingScreen');
       
-      // Get day of week (0 = Sunday, 6 = Saturday)
+      // Get day of week (0 = Sunday, 6 = Saturday) — matches BusinessHoursModel convention
       final dayOfWeek = _selectedDate!.weekday % 7; // Convert Monday=1 to Sunday=0 format
       
-      // Get working hours for this day
+      // Get working hours for this day from settings, or use default when none configured
       BusinessHoursModel? dayHours;
       if (_businessSettings != null) {
         dayHours = _businessSettings!.getHoursForDay(dayOfWeek);
       }
+      // When no business settings (e.g. no Firestore document) or this day not in weeklyHours, use default
+      if (dayHours == null) {
+        dayHours = _getDefaultHoursForDay(dayOfWeek);
+        logInfo('Using default hours for day $dayOfWeek (no settings or day not configured)', tag: 'ClientBookingScreen');
+      }
       
-      // If business is closed on this day, no slots available
+      // If business is closed on this day (explicitly or default weekend), no slots available
       if (dayHours == null || !dayHours.isOpen || dayHours.timeSlots.isEmpty) {
         logInfo('Business is closed on selected day (dayOfWeek: $dayOfWeek)', tag: 'ClientBookingScreen');
         setState(() {

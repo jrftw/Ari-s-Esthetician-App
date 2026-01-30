@@ -311,16 +311,26 @@ class AppRouter {
 
     logDebug('Route checks - Login: $isLoginRoute, Signup: $isSignupRoute, Splash: $isSplashRoute, Welcome: $isWelcomeRoute, AccountChoice: $isAccountChoiceRoute, Booking: $isBookingRoute, Confirmation: $isConfirmationRoute, Settings: $isSettingsRoute', tag: 'AppRouter');
 
-    // Allow public routes without authentication
+    // Resolve final user before deciding; needed so logged-in users are redirected off welcome/login/signup
+    final finalUser = user ?? _authStateNotifier.currentUser ?? FirebaseAuth.instance.currentUser;
+
+    // MARK: - Logged-in user on unauthenticated-only routes
+    // If user is signed in and lands on splash, welcome, account choice, login, or signup → send to /admin or /booking
+    final isUnauthOnlyRoute = isSplashRoute || isWelcomeRoute || isAccountChoiceRoute || isLoginRoute || isSignupRoute;
+    if (finalUser != null && isUnauthOnlyRoute) {
+      logAuth('Logged-in user on unauthenticated route - redirecting to app', tag: 'AppRouter');
+      final isAdmin = await _authService.isAdmin();
+      final target = isAdmin ? '/admin' : AppConstants.routeClientBooking;
+      logRouter('Redirecting to $target', tag: 'AppRouter');
+      return target;
+    }
+
+    // Allow public routes when not authenticated (booking, confirmation, appointments, settings, welcome when no user)
     if (isSplashRoute || isWelcomeRoute || isAccountChoiceRoute || isLoginRoute || isSignupRoute || isBookingRoute || isConfirmationRoute || isAppointmentsRoute || isSettingsRoute) {
       logRouter('Public route - allowing navigation', tag: 'AppRouter');
       return null;
     }
 
-    // Get final user state after potential restoration
-    // Always check Firebase Auth directly as it persists sessions automatically
-    final finalUser = user ?? _authStateNotifier.currentUser ?? FirebaseAuth.instance.currentUser;
-    
     // Redirect to login if not authenticated for protected routes
     if (finalUser == null) {
       logRouter('No user found after restoration - redirecting to /login', tag: 'AppRouter');
@@ -330,12 +340,12 @@ class AppRouter {
     // Check user role for admin routes
     final isAdminRoute = state.matchedLocation.startsWith('/admin');
     logDebug('Is admin route: $isAdminRoute', tag: 'AppRouter');
-    
+
     if (isAdminRoute) {
       logAuth('Checking admin status for user', tag: 'AppRouter');
       final isAdmin = await _authService.isAdmin();
       logAuth('Is admin: $isAdmin', tag: 'AppRouter');
-      
+
       if (!isAdmin) {
         logRouter('Non-admin user accessing admin route - redirecting to booking', tag: 'AppRouter');
         return AppConstants.routeClientBooking;
@@ -344,7 +354,6 @@ class AppRouter {
     }
 
     // Allow admins to access client routes (for "view as client" feature)
-    // Client routes are public, but we log when admins access them
     final isClientRoute = state.matchedLocation == AppConstants.routeClientBooking ||
         state.matchedLocation.startsWith(AppConstants.routeClientConfirmation) ||
         state.matchedLocation == AppConstants.routeClientAppointments;
