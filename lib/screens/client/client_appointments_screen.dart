@@ -99,7 +99,6 @@ class _ClientAppointmentsScreenState extends State<ClientAppointmentsScreen> wit
     logUI('Building ClientAppointmentsScreen widget', tag: 'ClientAppointmentsScreen');
     
     return Scaffold(
-      backgroundColor: AppColors.backgroundCream,
       appBar: AppBar(
         title: const Text('My Appointments'),
         backgroundColor: AppColors.sunflowerYellow,

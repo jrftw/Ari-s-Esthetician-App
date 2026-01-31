@@ -104,7 +104,6 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
     logUI('Building ClientConfirmationScreen widget', tag: 'ClientConfirmationScreen');
     
     return Scaffold(
-      backgroundColor: AppColors.backgroundCream,
       appBar: AppBar(
         title: const Text('Booking Confirmed'),
         backgroundColor: AppColors.sunflowerYellow,

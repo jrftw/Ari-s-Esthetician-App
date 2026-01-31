@@ -37,7 +37,8 @@ class AppTheme {
       ),
 
       // MARK: - Scaffold
-      scaffoldBackgroundColor: AppColors.backgroundCream,
+      // Transparent so AuraScreenWrapper's AuraBackground (cream + orbs) shows through
+      scaffoldBackgroundColor: Colors.transparent,
 
       // MARK: - App Bar
       appBarTheme: AppBarTheme(
@@ -57,6 +58,7 @@ class AppTheme {
         color: Colors.white,
         elevation: 2,
         shadowColor: AppColors.shadowColor,
+        surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
@@ -184,16 +186,170 @@ class AppTheme {
     );
   }
 
-  /// Get the dark theme configuration (optional for future use)
+  /// Get the dark theme configuration
   static ThemeData get darkTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      // Dark theme can be implemented later if needed
+
+      // MARK: - Color Scheme (Dark)
       colorScheme: ColorScheme.dark(
         primary: AppColors.sunflowerYellow,
         secondary: AppColors.softCream,
-        background: AppColors.darkBrown,
+        tertiary: AppColors.mutedGreen,
+        surface: AppColors.darkSurface,
+        background: AppColors.darkBackground,
+        error: AppColors.errorRed,
+        onPrimary: AppColors.darkBrown,
+        onSecondary: AppColors.darkBrown,
+        onSurface: AppColors.darkTextPrimary,
+        onBackground: AppColors.darkTextPrimary,
+        onError: Colors.white,
+      ),
+
+      // MARK: - Scaffold (Dark)
+      scaffoldBackgroundColor: Colors.transparent,
+
+      // MARK: - App Bar (Dark)
+      appBarTheme: AppBarTheme(
+        backgroundColor: AppColors.darkSurface,
+        foregroundColor: AppColors.darkTextPrimary,
+        elevation: 0,
+        centerTitle: true,
+        titleTextStyle: AppTypography.appBarTitle.copyWith(color: AppColors.darkTextPrimary),
+        iconTheme: const IconThemeData(
+          color: AppColors.darkTextPrimary,
+          size: 24,
+        ),
+      ),
+
+      // MARK: - Card (Dark)
+      cardTheme: CardThemeData(
+        color: AppColors.darkSurface,
+        elevation: 2,
+        shadowColor: AppColors.darkShadow,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      ),
+
+      // MARK: - Button Themes (Dark)
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.sunflowerYellow,
+          foregroundColor: AppColors.darkBrown,
+          elevation: 2,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          textStyle: AppTypography.buttonText,
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.sunflowerYellow,
+          side: const BorderSide(color: AppColors.sunflowerYellow, width: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          textStyle: AppTypography.buttonText,
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: AppColors.sunflowerYellow,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          textStyle: AppTypography.buttonText,
+        ),
+      ),
+
+      // MARK: - Input Decoration (Dark)
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: AppColors.darkSurfaceVariant,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.darkBorder),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.darkBorder),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.sunflowerYellow, width: 2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.errorRed),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.errorRed, width: 2),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        labelStyle: AppTypography.bodyMedium.copyWith(color: AppColors.darkTextPrimary),
+        hintStyle: AppTypography.bodyMedium.copyWith(color: AppColors.darkTextSecondary),
+      ),
+
+      // MARK: - Typography (Dark)
+      textTheme: TextTheme(
+        displayLarge: AppTypography.displayLarge.copyWith(color: AppColors.darkTextPrimary),
+        displayMedium: AppTypography.displayMedium.copyWith(color: AppColors.darkTextPrimary),
+        displaySmall: AppTypography.displaySmall.copyWith(color: AppColors.darkTextPrimary),
+        headlineLarge: AppTypography.headlineLarge.copyWith(color: AppColors.darkTextPrimary),
+        headlineMedium: AppTypography.headlineMedium.copyWith(color: AppColors.darkTextPrimary),
+        headlineSmall: AppTypography.headlineSmall.copyWith(color: AppColors.darkTextPrimary),
+        titleLarge: AppTypography.titleLarge.copyWith(color: AppColors.darkTextPrimary),
+        titleMedium: AppTypography.titleMedium.copyWith(color: AppColors.darkTextPrimary),
+        titleSmall: AppTypography.titleSmall.copyWith(color: AppColors.darkTextPrimary),
+        bodyLarge: AppTypography.bodyLarge.copyWith(color: AppColors.darkTextPrimary),
+        bodyMedium: AppTypography.bodyMedium.copyWith(color: AppColors.darkTextPrimary),
+        bodySmall: AppTypography.bodySmall.copyWith(color: AppColors.darkTextPrimary),
+        labelLarge: AppTypography.labelLarge.copyWith(color: AppColors.darkTextPrimary),
+        labelMedium: AppTypography.labelMedium.copyWith(color: AppColors.darkTextPrimary),
+        labelSmall: AppTypography.labelSmall.copyWith(color: AppColors.darkTextPrimary),
+      ),
+
+      // MARK: - Dialog (Dark)
+      dialogTheme: DialogThemeData(
+        backgroundColor: AppColors.darkSurface,
+        elevation: 8,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        titleTextStyle: AppTypography.titleLarge.copyWith(color: AppColors.darkTextPrimary),
+        contentTextStyle: AppTypography.bodyMedium.copyWith(color: AppColors.darkTextPrimary),
+      ),
+
+      // MARK: - Bottom Sheet (Dark)
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: AppColors.darkSurface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+      ),
+
+      // MARK: - Chip (Dark)
+      chipTheme: ChipThemeData(
+        backgroundColor: AppColors.darkSurfaceVariant,
+        selectedColor: AppColors.sunflowerYellow,
+        labelStyle: AppTypography.bodySmall.copyWith(color: AppColors.darkTextPrimary),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+      ),
+
+      // MARK: - Divider (Dark)
+      dividerTheme: const DividerThemeData(
+        color: AppColors.darkBorder,
+        thickness: 1,
+        space: 1,
       ),
     );
   }

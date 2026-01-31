@@ -25,7 +25,6 @@ class AccountChoiceScreen extends StatelessWidget {
     logUI('Building AccountChoiceScreen', tag: 'AccountChoiceScreen');
     
     return Scaffold(
-      backgroundColor: AppColors.backgroundCream,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,

@@ -1856,7 +1856,7 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
           // Create an iframe to load PDF and trigger print
           final iframe = html.IFrameElement()
             ..src = url
-            ..style.display = 'none';
+            ..style?.display = 'none';
           html.document.body?.append(iframe);
           
           // Wait for PDF to load, then trigger print

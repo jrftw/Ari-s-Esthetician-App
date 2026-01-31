@@ -1,9 +1,9 @@
 /*
  * Filename: settings_screen.dart
- * Purpose: General settings screen accessible to all users with changelog and logout option
+ * Purpose: General settings screen with appearance (theme + aura), changelog, and logout
  * Author: Kevin Doyle Jr. / Infinitum Imagery LLC
- * Last Modified: 2026-01-22
- * Dependencies: Flutter, go_router, firebase_auth
+ * Last Modified: 2026-01-30
+ * Dependencies: Flutter, go_router, firebase_auth, preferences_service
  * Platform Compatibility: iOS, Android, Web
  */
 
@@ -16,6 +16,7 @@ import '../../core/constants/app_typography.dart';
 import '../../core/constants/app_version.dart';
 import '../../core/logging/app_logger.dart';
 import '../../services/auth_service.dart';
+import '../../services/preferences_service.dart';
 
 // MARK: - Settings Screen
 /// General settings screen accessible to all users
@@ -31,17 +32,24 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   // MARK: - Services
   final AuthService _authService = AuthService();
+  final PreferencesService _prefs = PreferencesService.instance;
   
   // MARK: - State Variables
   bool _isLoggingOut = false;
   User? _currentUser;
   bool _isChangelogExpanded = false;
+  String _themeMode = kThemeModeSystem;
+  bool _auraEnabled = true;
+  String _auraIntensity = kAuraIntensityMedium;
 
   @override
   void initState() {
     super.initState();
     logUI('SettingsScreen initState called', tag: 'SettingsScreen');
     _currentUser = _authService.currentUser;
+    _themeMode = _prefs.themeModeSync;
+    _auraEnabled = _prefs.auraEnabledSync;
+    _auraIntensity = _prefs.auraIntensitySync;
     
     // Listen to auth state changes
     _authService.authStateChanges.listen((user) {
@@ -51,6 +59,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
         });
       }
     });
+    // Listen to theme/aura prefs so UI stays in sync if changed elsewhere
+    _prefs.addListener(_onPreferencesChanged);
+  }
+
+  void _onPreferencesChanged() {
+    if (mounted) {
+      setState(() {
+        _themeMode = _prefs.themeModeSync;
+        _auraEnabled = _prefs.auraEnabledSync;
+        _auraIntensity = _prefs.auraIntensitySync;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _prefs.removeListener(_onPreferencesChanged);
+    super.dispose();
   }
 
   // MARK: - Build Method
@@ -59,7 +85,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     logUI('Building SettingsScreen widget', tag: 'SettingsScreen');
     
     return Scaffold(
-      backgroundColor: AppColors.backgroundCream,
       appBar: AppBar(
         title: const Text('Settings'),
         backgroundColor: AppColors.sunflowerYellow,
@@ -73,6 +98,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // MARK: - User Info Section
             if (_currentUser != null) _buildUserInfoSection(),
             
+            // MARK: - Appearance Section (Theme + Aura)
+            _buildAppearanceSection(),
+            
             // MARK: - Changelog Section
             _buildChangelogSection(),
             
@@ -80,6 +108,126 @@ class _SettingsScreenState extends State<SettingsScreen> {
             
             // MARK: - Logout Section
             if (_currentUser != null) _buildLogoutSection(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // MARK: - Appearance Section
+  /// Build appearance section: theme mode (Light / Dark / Auto) and aura (on/off + intensity)
+  Widget _buildAppearanceSection() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? AppColors.darkTextPrimary : AppColors.darkBrown;
+    final secondaryColor = isDark ? AppColors.darkTextSecondary : AppColors.textSecondary;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.palette_outlined,
+                  color: AppColors.sunflowerYellow,
+                  size: 24,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Appearance',
+                  style: AppTypography.titleLarge.copyWith(color: textColor),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // MARK: - Theme Mode
+            Text(
+              'Theme',
+              style: AppTypography.titleSmall.copyWith(
+                color: secondaryColor,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment<String>(
+                  value: kThemeModeLight,
+                  icon: Icon(Icons.light_mode, size: 20),
+                  label: Text('Light'),
+                ),
+                ButtonSegment<String>(
+                  value: kThemeModeDark,
+                  icon: Icon(Icons.dark_mode, size: 20),
+                  label: Text('Dark'),
+                ),
+                ButtonSegment<String>(
+                  value: kThemeModeSystem,
+                  icon: Icon(Icons.brightness_auto, size: 20),
+                  label: Text('Auto'),
+                ),
+              ],
+              selected: {_themeMode},
+              onSelectionChanged: (Set<String> selected) {
+                final value = selected.first;
+                setState(() => _themeMode = value);
+                _prefs.setThemeMode(value);
+                logInfo('Theme mode set to $value', tag: 'SettingsScreen');
+              },
+            ),
+            const SizedBox(height: 20),
+            // MARK: - Aura
+            Text(
+              'Background aura',
+              style: AppTypography.titleSmall.copyWith(
+                color: secondaryColor,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              value: _auraEnabled,
+              onChanged: (bool value) {
+                setState(() => _auraEnabled = value);
+                _prefs.setAuraEnabled(value);
+                logInfo('Aura enabled: $value', tag: 'SettingsScreen');
+              },
+              title: Text(
+                'Show aura',
+                style: AppTypography.bodyMedium.copyWith(color: textColor),
+              ),
+              subtitle: Text(
+                'Soft glowing orbs behind screens',
+                style: AppTypography.bodySmall.copyWith(color: secondaryColor),
+              ),
+              activeThumbColor: AppColors.sunflowerYellow,
+              activeTrackColor: AppColors.sunflowerYellow.withValues(alpha: 0.5),
+              contentPadding: EdgeInsets.zero,
+            ),
+            if (_auraEnabled) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Aura intensity',
+                style: AppTypography.bodySmall.copyWith(color: secondaryColor),
+              ),
+              const SizedBox(height: 6),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment<String>(value: kAuraIntensityLow, label: Text('Low')),
+                  ButtonSegment<String>(value: kAuraIntensityMedium, label: Text('Medium')),
+                  ButtonSegment<String>(value: kAuraIntensityHigh, label: Text('High')),
+                ],
+                selected: {_auraIntensity},
+                onSelectionChanged: (Set<String> selected) {
+                  final value = selected.first;
+                  setState(() => _auraIntensity = value);
+                  _prefs.setAuraIntensity(value);
+                  logInfo('Aura intensity set to $value', tag: 'SettingsScreen');
+                },
+              ),
+            ],
           ],
         ),
       ),
@@ -486,7 +634,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 }
 
 // Suggestions For Features and Additions Later:
-// - Add theme toggle (light/dark mode)
 // - Add notification preferences
 // - Add language selection
 // - Add about section with app info

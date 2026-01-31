@@ -119,7 +119,6 @@ class _SplashScreenState extends State<SplashScreen> {
     logWidgetLifecycle('SplashScreen', 'build', tag: 'SplashScreen');
     
     return Scaffold(
-      backgroundColor: AppColors.backgroundCream,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

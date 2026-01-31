@@ -1060,7 +1060,6 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
     logUI('Building ClientBookingScreen widget', tag: 'ClientBookingScreen');
     
     return Scaffold(
-      backgroundColor: AppColors.backgroundCream,
       appBar: AppBar(
         title: const Text('Book Appointment'),
         backgroundColor: AppColors.sunflowerYellow,

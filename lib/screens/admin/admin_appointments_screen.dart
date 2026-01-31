@@ -272,7 +272,6 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
     logUI('Building AdminAppointmentsScreen widget', tag: 'AdminAppointmentsScreen');
 
     return Scaffold(
-      backgroundColor: AppColors.backgroundCream,
       appBar: AppBar(
         title: const Text('Appointments'),
         backgroundColor: AppColors.sunflowerYellow,

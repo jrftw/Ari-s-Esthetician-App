@@ -87,6 +87,39 @@ class AppColors {
   
   /// No-show appointment
   static const Color statusNoShow = Color(0xFFE53935);
+
+  // MARK: - Aura / Glow Colors
+  /// Soft golden aura - complements sunflower, used for background orbs and glows
+  static const Color auraGolden = Color(0x33FFD700); // ~20% sunflower
+  /// Warm cream aura - very soft, for ambient background orbs
+  static const Color auraCream = Color(0x22FFF8E1); // ~13% soft cream
+  /// Soft lavender aura - subtle spa/calm accent for orbs
+  static const Color auraLavender = Color(0x1AE8EAF6); // ~10% light lavender
+  /// Muted green aura - soft accent for secondary orbs
+  static const Color auraMutedGreen = Color(0x228BC34A); // ~13% muted green
+  /// Stronger golden glow for emphasis (e.g. card glow)
+  static const Color auraGlowStrong = Color(0x28FFD700); // ~16% sunflower
+
+  // MARK: - Dark Theme Colors
+  /// Dark theme background
+  static const Color darkBackground = Color(0xFF1C1917);
+  /// Dark theme surface (cards, app bar)
+  static const Color darkSurface = Color(0xFF292524);
+  /// Dark theme surface variant
+  static const Color darkSurfaceVariant = Color(0xFF44403C);
+  /// Text on dark backgrounds (primary)
+  static const Color darkTextPrimary = Color(0xFFFAFAF9);
+  /// Text on dark backgrounds (secondary)
+  static const Color darkTextSecondary = Color(0xFFA8A29E);
+  /// Dark theme border
+  static const Color darkBorder = Color(0xFF57534E);
+  /// Dark theme shadow
+  static const Color darkShadow = Color(0x33000000);
+  /// Dark theme aura orbs (softer golden/cream for dark bg)
+  static const Color darkAuraGolden = Color(0x22FFD700);
+  static const Color darkAuraCream = Color(0x18FFF8E1);
+  static const Color darkAuraLavender = Color(0x12E8EAF6);
+  static const Color darkAuraMutedGreen = Color(0x158BC34A);
 }
 
 // Suggestions For Features and Additions Later:

@@ -2,13 +2,14 @@
  * Filename: main.dart
  * Purpose: Application entry point and initialization
  * Author: Kevin Doyle Jr. / Infinitum Imagery LLC
- * Last Modified: 2024-01-XX
- * Dependencies: Flutter, Firebase, Theme, Routing
+ * Last Modified: 2026-01-30
+ * Dependencies: Flutter, Firebase, Theme, Routing, AppDiagnosticsService
  * Platform Compatibility: iOS, Android, Web
  */
 
 // MARK: - Imports
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'core/config/firebase_config.dart';
 import 'core/theme/app_theme.dart';
@@ -17,6 +18,8 @@ import 'core/routing/app_router.dart';
 import 'core/constants/app_colors.dart';
 import 'core/constants/app_typography.dart';
 import 'services/version_check_service.dart';
+import 'services/preferences_service.dart';
+import 'services/app_diagnostics_service.dart';
 import 'screens/update_required_screen.dart';
 
 // MARK: - Main Function
@@ -52,16 +55,38 @@ void main() async {
   logStep(3, 'Initializing Firebase', tag: 'Main');
   bool firebaseInitialized = false;
   String? firebaseError;
+  final AppDiagnosticsService diagnostics = AppDiagnosticsService();
   try {
     logFirebase('Attempting Firebase initialization', tag: 'Main');
     await FirebaseConfig.initialize();
     firebaseInitialized = true;
+    diagnostics.recordCheck(
+      checkKey: 'firebase',
+      displayName: AriDiagnosticCheckNames.firebase,
+      working: true,
+    );
     print('🔍 Step 3: Firebase initialized ✅');
     logSuccess('Firebase initialized successfully', tag: 'Main');
     logComplete('Application initialization complete', tag: 'Main');
   } catch (e, stackTrace) {
     firebaseInitialized = false;
     firebaseError = e.toString();
+    diagnostics.recordCheck(
+      checkKey: 'firebase',
+      displayName: AriDiagnosticCheckNames.firebase,
+      working: false,
+      shortReason: 'Initialization failed',
+    );
+    diagnostics.recordUnavailable(
+      checkKey: 'auth',
+      displayName: AriDiagnosticCheckNames.authentication,
+      reason: 'Requires Firebase',
+    );
+    diagnostics.recordUnavailable(
+      checkKey: 'database',
+      displayName: AriDiagnosticCheckNames.database,
+      reason: 'Requires Firebase',
+    );
     print('🔍 Step 3: Firebase failed ❌ - $e');
     logError(
       'Firebase initialization failed',
@@ -119,11 +144,12 @@ class ArisEstheticianApp extends StatefulWidget {
 }
 
 // MARK: - Main App Widget State
-/// State for main app widget with version checking
+/// State for main app widget with version checking and theme/aura preferences
 class _ArisEstheticianAppState extends State<ArisEstheticianApp> {
   VersionCheckResult? _versionCheckResult;
   bool _versionCheckComplete = false;
   final VersionCheckService _versionCheckService = VersionCheckService();
+  String _themeMode = kThemeModeSystem;
 
   @override
   void initState() {
@@ -133,6 +159,15 @@ class _ArisEstheticianAppState extends State<ArisEstheticianApp> {
     
     logUI('Building ArisEstheticianApp widget', tag: 'ArisEstheticianApp');
     logDebug('Firebase initialized: ${widget.firebaseInitialized}', tag: 'ArisEstheticianApp');
+    
+    // MARK: - Theme and Aura Preferences
+    /// Load theme/aura cache and listen for changes so theme mode and aura update app-wide
+    PreferencesService.instance.ensureThemeAuraCache().then((_) {
+      if (mounted) {
+        setState(() => _themeMode = PreferencesService.instance.themeModeSync);
+      }
+    });
+    PreferencesService.instance.addListener(_onPreferencesChanged);
     
     // MARK: - Version Check
     /// Check app version if Firebase is initialized
@@ -145,15 +180,40 @@ class _ArisEstheticianAppState extends State<ArisEstheticianApp> {
     }
   }
 
+  void _onPreferencesChanged() {
+    if (mounted) {
+      setState(() => _themeMode = PreferencesService.instance.themeModeSync);
+    }
+  }
+
+  @override
+  void dispose() {
+    PreferencesService.instance.removeListener(_onPreferencesChanged);
+    super.dispose();
+  }
+
+  /// Resolve ThemeMode from stored string and (for system) platform brightness
+  ThemeMode get _resolvedThemeMode {
+    if (_themeMode == kThemeModeDark) return ThemeMode.dark;
+    if (_themeMode == kThemeModeLight) return ThemeMode.light;
+    return ThemeMode.system;
+  }
+
   // MARK: - Version Check Method
   /// Check app version against latest required version
   Future<void> _checkVersion() async {
+    final diagnostics = AppDiagnosticsService();
     try {
       logInfo('Starting version check', tag: 'ArisEstheticianApp');
       print('🔍 Checking app version...');
       
       final result = await _versionCheckService.checkVersion();
       
+      diagnostics.recordCheck(
+        checkKey: 'version_check',
+        displayName: AriDiagnosticCheckNames.versionCheck,
+        working: true,
+      );
       if (mounted) {
         setState(() {
           _versionCheckResult = result;
@@ -169,6 +229,12 @@ class _ArisEstheticianAppState extends State<ArisEstheticianApp> {
         }
       }
     } catch (e, stackTrace) {
+      diagnostics.recordCheck(
+        checkKey: 'version_check',
+        displayName: AriDiagnosticCheckNames.versionCheck,
+        working: false,
+        shortReason: 'Check failed',
+      );
       logError(
         'Version check failed',
         tag: 'ArisEstheticianApp',
@@ -259,10 +325,16 @@ class _ArisEstheticianAppState extends State<ArisEstheticianApp> {
 
     // MARK: - Normal App
     /// Show normal app if version is up to date
+    final diagnostics = AppDiagnosticsService();
     print('🔍 Creating AppRouter instance...');
     logRouter('Creating AppRouter instance', tag: 'ArisEstheticianApp');
     try {
       final router = AppRouter().router;
+      diagnostics.recordCheck(
+        checkKey: 'router',
+        displayName: AriDiagnosticCheckNames.appRouter,
+        working: true,
+      );
       print('🔍 Router created successfully ✅');
       logSuccess('Router created successfully', tag: 'ArisEstheticianApp');
 
@@ -274,8 +346,8 @@ class _ArisEstheticianAppState extends State<ArisEstheticianApp> {
         
         // MARK: - Theme Configuration
         theme: AppTheme.lightTheme,
-        // darkTheme: AppTheme.darkTheme, // Uncomment when dark mode is implemented
-        // themeMode: ThemeMode.system, // Uncomment when dark mode is implemented
+        darkTheme: AppTheme.darkTheme,
+        themeMode: _resolvedThemeMode,
 
         // MARK: - Router Configuration
         routerConfig: router,
@@ -283,6 +355,12 @@ class _ArisEstheticianAppState extends State<ArisEstheticianApp> {
       print('🔍 MaterialApp.router created ✅');
       return app;
     } catch (e, stackTrace) {
+      diagnostics.recordCheck(
+        checkKey: 'router',
+        displayName: AriDiagnosticCheckNames.appRouter,
+        working: false,
+        shortReason: 'Initialization failed',
+      );
       print('🔍 ❌ ERROR creating router: $e');
       print('🔍 Stack trace: $stackTrace');
       logError('Failed to create router', tag: 'ArisEstheticianApp', error: e, stackTrace: stackTrace);
@@ -293,7 +371,7 @@ class _ArisEstheticianAppState extends State<ArisEstheticianApp> {
         theme: AppTheme.lightTheme,
         home: _ErrorScreen(
           title: 'Router Error',
-          message: 'Failed to initialize router: ${e.toString()}',
+          message: 'Failed to initialize router. Please try again or contact support.',
         ),
       );
     }
@@ -301,7 +379,7 @@ class _ArisEstheticianAppState extends State<ArisEstheticianApp> {
 }
 
 // MARK: - Error Screen (Generic)
-/// Generic error screen for displaying errors
+/// Generic error screen for displaying errors. Shows Copy diagnostic report when diagnostics indicate failures.
 class _ErrorScreen extends StatelessWidget {
   final String title;
   final String message;
@@ -311,10 +389,28 @@ class _ErrorScreen extends StatelessWidget {
     required this.message,
   });
 
+  void _copyDiagnosticReport(BuildContext context) {
+    final diagnostics = AppDiagnosticsService();
+    if (!diagnostics.hasAnyFailure) return;
+    final report = diagnostics.getCopyableReport();
+    if (report.isEmpty) return;
+    Clipboard.setData(ClipboardData(text: report));
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Diagnostic report copied. You can send it to support.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     logUI('Building ErrorScreen: $title', tag: 'ErrorScreen');
-    
+    final diagnostics = AppDiagnosticsService();
+    final showCopyReport = diagnostics.hasAnyFailure;
+
     return Scaffold(
       backgroundColor: AppColors.backgroundCream,
       body: Center(
@@ -344,6 +440,26 @@ class _ErrorScreen extends StatelessWidget {
                 ),
                 textAlign: TextAlign.center,
               ),
+              if (showCopyReport) ...[
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  onPressed: () => _copyDiagnosticReport(context),
+                  icon: const Icon(Icons.copy),
+                  label: const Text('Copy diagnostic report'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.sunflowerYellow,
+                    foregroundColor: AppColors.darkBrown,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Send the report to support to help fix the issue.',
+                  style: AppTypography.bodySmall.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ],
           ),
         ),
@@ -353,67 +469,107 @@ class _ErrorScreen extends StatelessWidget {
 }
 
 // MARK: - Firebase Error Screen
-/// Displays error message when Firebase initialization fails
+/// Displays error message when Firebase initialization fails. Shows Copy diagnostic report for support.
 class _FirebaseErrorScreen extends StatelessWidget {
   final String? error;
 
   const _FirebaseErrorScreen({this.error});
 
+  void _copyDiagnosticReport(BuildContext context) {
+    final diagnostics = AppDiagnosticsService();
+    if (!diagnostics.hasAnyFailure) return;
+    final report = diagnostics.getCopyableReport();
+    if (report.isEmpty) return;
+    Clipboard.setData(ClipboardData(text: report));
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Diagnostic report copied. You can send it to support.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     logUI('Building FirebaseErrorScreen', tag: 'FirebaseErrorScreen');
     logDebug('Error message: ${error ?? "No error details"}', tag: 'FirebaseErrorScreen');
-    
+    final diagnostics = AppDiagnosticsService();
+    final showCopyReport = diagnostics.hasAnyFailure;
+
     return Scaffold(
       backgroundColor: AppColors.backgroundCream,
       body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.error_outline,
-                size: 64,
-                color: AppColors.errorRed,
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Firebase Configuration Error',
-                style: AppTypography.headlineSmall.copyWith(
-                  color: AppColors.darkBrown,
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 64,
+                  color: AppColors.errorRed,
                 ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Firebase has not been properly configured.\n\n'
-                'Please run:\n'
-                'flutterfire configure --project=ari-s-esthetician-app',
-                style: AppTypography.bodyMedium.copyWith(
-                  color: AppColors.textSecondary,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              if (error != null) ...[
                 const SizedBox(height: 24),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red.shade200),
+                Text(
+                  'Firebase Configuration Error',
+                  style: AppTypography.headlineSmall.copyWith(
+                    color: AppColors.darkBrown,
                   ),
-                  child: Text(
-                    'Error: $error',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Firebase has not been properly configured.\n\n'
+                  'Please run:\n'
+                  'flutterfire configure --project=ari-s-esthetician-app',
+                  style: AppTypography.bodyMedium.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: 24),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: Text(
+                      'Error: $error',
+                      style: AppTypography.bodySmall.copyWith(
+                        color: Colors.red.shade900,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
+                if (showCopyReport) ...[
+                  const SizedBox(height: 24),
+                  FilledButton.icon(
+                    onPressed: () => _copyDiagnosticReport(context),
+                    icon: const Icon(Icons.copy),
+                    label: const Text('Copy diagnostic report'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.sunflowerYellow,
+                      foregroundColor: AppColors.darkBrown,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Send the report to support to help fix the issue.',
                     style: AppTypography.bodySmall.copyWith(
-                      color: Colors.red.shade900,
+                      color: AppColors.textSecondary,
                     ),
                     textAlign: TextAlign.center,
                   ),
-                ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -427,3 +583,4 @@ class _FirebaseErrorScreen extends StatelessWidget {
 // - Add offline mode handling
 // - Add app update checking
 // - Add analytics initialization
+// - Diagnostics: optional auth/database checks when Firebase is up for richer reports

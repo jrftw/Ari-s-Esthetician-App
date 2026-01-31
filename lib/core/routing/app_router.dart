@@ -35,6 +35,8 @@ import '../../screens/splash_screen.dart';
 import '../../screens/welcome/welcome_screen.dart';
 import '../../screens/welcome/account_choice_screen.dart';
 import '../../screens/settings/settings_screen.dart';
+import '../theme/aura_background.dart';
+import '../../services/preferences_service.dart';
 
 // MARK: - Auth State Notifier
 /// Notifier that listens to Firebase Auth state changes
@@ -108,132 +110,143 @@ class AppRouter {
       refreshListenable: _authStateNotifier,
       redirect: _handleRedirect,
       routes: [
-        // MARK: - Splash Route
-        GoRoute(
-          path: '/',
-          name: 'splash',
-          builder: (context, state) {
-            logRouter('Building SplashScreen route', tag: 'AppRouter');
-            return const SplashScreen();
+        // MARK: - Aura Shell (wraps all routes with aura background; rebuilds when theme/aura prefs change)
+        ShellRoute(
+          builder: (context, state, child) {
+            return ListenableBuilder(
+              listenable: PreferencesService.instance,
+              builder: (_, __) => AuraScreenWrapper(child: child),
+            );
           },
-        ),
+          routes: [
+            // MARK: - Splash Route
+            GoRoute(
+              path: '/',
+              name: 'splash',
+              builder: (context, state) {
+                logRouter('Building SplashScreen route', tag: 'AppRouter');
+                return const SplashScreen();
+              },
+            ),
 
-        // MARK: - Welcome Routes
-        GoRoute(
-          path: AppConstants.routeWelcome,
-          name: 'welcome',
-          builder: (context, state) {
-            logRouter('Building WelcomeScreen route', tag: 'AppRouter');
-            return const WelcomeScreen();
-          },
-        ),
-        GoRoute(
-          path: AppConstants.routeAccountChoice,
-          name: 'account-choice',
-          builder: (context, state) {
-            logRouter('Building AccountChoiceScreen route', tag: 'AppRouter');
-            return const AccountChoiceScreen();
-          },
-        ),
+            // MARK: - Welcome Routes
+            GoRoute(
+              path: AppConstants.routeWelcome,
+              name: 'welcome',
+              builder: (context, state) {
+                logRouter('Building WelcomeScreen route', tag: 'AppRouter');
+                return const WelcomeScreen();
+              },
+            ),
+            GoRoute(
+              path: AppConstants.routeAccountChoice,
+              name: 'account-choice',
+              builder: (context, state) {
+                logRouter('Building AccountChoiceScreen route', tag: 'AppRouter');
+                return const AccountChoiceScreen();
+              },
+            ),
 
-        // MARK: - Auth Routes
-        GoRoute(
-          path: '/login',
-          name: 'login',
-          builder: (context, state) => const LoginScreen(),
-        ),
-        GoRoute(
-          path: '/signup',
-          name: 'signup',
-          builder: (context, state) => const SignUpScreen(),
-        ),
+            // MARK: - Auth Routes
+            GoRoute(
+              path: '/login',
+              name: 'login',
+              builder: (context, state) => const LoginScreen(),
+            ),
+            GoRoute(
+              path: '/signup',
+              name: 'signup',
+              builder: (context, state) => const SignUpScreen(),
+            ),
 
-        // MARK: - Client Routes
-        GoRoute(
-          path: AppConstants.routeClientBooking,
-          name: 'client-booking',
-          builder: (context, state) {
-            logRouter('Building ClientBookingScreen route', tag: 'AppRouter');
-            return const ClientBookingScreen();
-          },
-        ),
-        GoRoute(
-          path: '${AppConstants.routeClientConfirmation}/:appointmentId',
-          name: 'client-confirmation',
-          builder: (context, state) {
-            final appointmentId = state.pathParameters['appointmentId'] ?? '';
-            return ClientConfirmationScreen(appointmentId: appointmentId);
-          },
-        ),
-        GoRoute(
-          path: AppConstants.routeClientAppointments,
-          name: 'client-appointments',
-          builder: (context, state) {
-            logRouter('Building ClientAppointmentsScreen route', tag: 'AppRouter');
-            return const ClientAppointmentsScreen();
-          },
-        ),
+            // MARK: - Client Routes
+            GoRoute(
+              path: AppConstants.routeClientBooking,
+              name: 'client-booking',
+              builder: (context, state) {
+                logRouter('Building ClientBookingScreen route', tag: 'AppRouter');
+                return const ClientBookingScreen();
+              },
+            ),
+            GoRoute(
+              path: '${AppConstants.routeClientConfirmation}/:appointmentId',
+              name: 'client-confirmation',
+              builder: (context, state) {
+                final appointmentId = state.pathParameters['appointmentId'] ?? '';
+                return ClientConfirmationScreen(appointmentId: appointmentId);
+              },
+            ),
+            GoRoute(
+              path: AppConstants.routeClientAppointments,
+              name: 'client-appointments',
+              builder: (context, state) {
+                logRouter('Building ClientAppointmentsScreen route', tag: 'AppRouter');
+                return const ClientAppointmentsScreen();
+              },
+            ),
 
-        // MARK: - Admin Routes
-        GoRoute(
-          path: AppConstants.routeAdminDashboard,
-          name: 'admin-dashboard',
-          builder: (context, state) => const AdminDashboardScreen(),
-        ),
-        GoRoute(
-          path: AppConstants.routeAdminServices,
-          name: 'admin-services',
-          builder: (context, state) => const AdminServicesScreen(),
-        ),
-        GoRoute(
-          path: AppConstants.routeAdminAppointments,
-          name: 'admin-appointments',
-          builder: (context, state) => const AdminAppointmentsScreen(),
-        ),
-        GoRoute(
-          path: AppConstants.routeAdminClients,
-          name: 'admin-clients',
-          builder: (context, state) => const AdminClientsScreen(),
-        ),
-        GoRoute(
-          path: AppConstants.routeAdminSettings,
-          name: 'admin-settings',
-          builder: (context, state) => const AdminSettingsScreen(),
-        ),
-        GoRoute(
-          path: AppConstants.routeAdminCategories,
-          name: 'admin-categories',
-          builder: (context, state) => const AdminCategoryManagementScreen(),
-        ),
-        GoRoute(
-          path: AppConstants.routeAdminEarnings,
-          name: 'admin-earnings',
-          builder: (context, state) => const AdminEarningsScreen(),
-        ),
-        GoRoute(
-          path: AppConstants.routeAdminNotifications,
-          name: 'admin-notifications',
-          builder: (context, state) => const AdminNotificationsScreen(),
-        ),
-        GoRoute(
-          path: AppConstants.routeAdminSoftwareEnhancements,
-          name: 'admin-software-enhancements',
-          builder: (context, state) => const AdminSoftwareEnhancementsScreen(),
-        ),
-        GoRoute(
-          path: AppConstants.routeAdminTimeOff,
-          name: 'admin-time-off',
-          builder: (context, state) => const AdminTimeOffScreen(),
-        ),
+            // MARK: - Admin Routes
+            GoRoute(
+              path: AppConstants.routeAdminDashboard,
+              name: 'admin-dashboard',
+              builder: (context, state) => const AdminDashboardScreen(),
+            ),
+            GoRoute(
+              path: AppConstants.routeAdminServices,
+              name: 'admin-services',
+              builder: (context, state) => const AdminServicesScreen(),
+            ),
+            GoRoute(
+              path: AppConstants.routeAdminAppointments,
+              name: 'admin-appointments',
+              builder: (context, state) => const AdminAppointmentsScreen(),
+            ),
+            GoRoute(
+              path: AppConstants.routeAdminClients,
+              name: 'admin-clients',
+              builder: (context, state) => const AdminClientsScreen(),
+            ),
+            GoRoute(
+              path: AppConstants.routeAdminSettings,
+              name: 'admin-settings',
+              builder: (context, state) => const AdminSettingsScreen(),
+            ),
+            GoRoute(
+              path: AppConstants.routeAdminCategories,
+              name: 'admin-categories',
+              builder: (context, state) => const AdminCategoryManagementScreen(),
+            ),
+            GoRoute(
+              path: AppConstants.routeAdminEarnings,
+              name: 'admin-earnings',
+              builder: (context, state) => const AdminEarningsScreen(),
+            ),
+            GoRoute(
+              path: AppConstants.routeAdminNotifications,
+              name: 'admin-notifications',
+              builder: (context, state) => const AdminNotificationsScreen(),
+            ),
+            GoRoute(
+              path: AppConstants.routeAdminSoftwareEnhancements,
+              name: 'admin-software-enhancements',
+              builder: (context, state) => const AdminSoftwareEnhancementsScreen(),
+            ),
+            GoRoute(
+              path: AppConstants.routeAdminTimeOff,
+              name: 'admin-time-off',
+              builder: (context, state) => const AdminTimeOffScreen(),
+            ),
 
-        // MARK: - Settings Route (General)
-        GoRoute(
-          path: AppConstants.routeSettings,
-          name: 'settings',
-          builder: (context, state) {
-            logRouter('Building SettingsScreen route', tag: 'AppRouter');
-            return const SettingsScreen();
-          },
+            // MARK: - Settings Route (General)
+            GoRoute(
+              path: AppConstants.routeSettings,
+              name: 'settings',
+              builder: (context, state) {
+                logRouter('Building SettingsScreen route', tag: 'AppRouter');
+                return const SettingsScreen();
+              },
+            ),
+          ],
         ),
       ],
     );

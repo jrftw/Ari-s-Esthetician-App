@@ -21,8 +21,8 @@ class AppConstants {
   @Deprecated('Use AppVersion.version instead')
   static const String appVersion = "1.0.0";
   
-  /// Minimum supported iOS version
-  static const int minIOSVersion = 12;
+  /// Minimum supported iOS version (build target is iOS 15.0 per Podfile; this is for reference/display)
+  static const int minIOSVersion = 15;
   
   /// Minimum supported Android version
   static const int minAndroidVersion = 21;

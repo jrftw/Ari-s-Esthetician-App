@@ -25,7 +25,6 @@ class WelcomeScreen extends StatelessWidget {
     logUI('Building WelcomeScreen', tag: 'WelcomeScreen');
     
     return Scaffold(
-      backgroundColor: AppColors.backgroundCream,
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(

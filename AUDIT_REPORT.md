@@ -135,4 +135,16 @@ The app is **structurally sound** and **fully functional** for core flows. Previ
 
 ---
 
-*End of audit. Application is in a good state for production use of core flows (web); native and polish items are optional.*
+## 6. iOS Compliance (January 30, 2026)
+
+A separate **iOS audit** was completed. See **IOS_AUDIT.md** for the full checklist. Summary:
+
+- **iOS platform added** via `flutter create --platforms=ios .` (previously missing).
+- **Info.plist** updated with **LSApplicationQueriesSchemes** (required for `url_launcher` on iOS).
+- **Podfile** and Xcode set to **iOS 15.0** minimum (required by cloud_firestore 6.x).
+- **App constants** `minIOSVersion` set to 15 to match.
+- **Before App Store:** Run `flutterfire configure` (add iOS app in Firebase), add `GoogleService-Info.plist`, set signing in Xcode, replace App Store URL placeholder in `update_required_screen.dart`.
+
+---
+
+*End of audit. Application is in a good state for production use of core flows (web); native and polish items are optional. iOS is configured and documented in IOS_AUDIT.md.*
