@@ -108,8 +108,16 @@ class BusinessSettingsModel extends Equatable {
   /// Timezone for the business
   final String timezone;
   
-  /// Google Calendar ID for syncing appointments
+  /// Google Calendar ID for syncing appointments (used when calendarSyncProvider is 'google')
   final String? googleCalendarId;
+  
+  /// Whether to auto-sync appointments to an external calendar (Google, Apple, or ICS)
+  @JsonKey(defaultValue: false)
+  final bool calendarSyncEnabled;
+  
+  /// Which calendar type to sync to: 'google', 'apple', or 'ics' (other/Outlook)
+  /// When calendarSyncEnabled is true, appointments are synced to this calendar type
+  final String? calendarSyncProvider;
   
   /// Stripe publishable key
   final String? stripePublishableKey;
@@ -160,6 +168,8 @@ class BusinessSettingsModel extends Equatable {
     this.bookingPolicyText = '',
     this.timezone = 'America/New_York',
     this.googleCalendarId,
+    this.calendarSyncEnabled = false,
+    this.calendarSyncProvider,
     this.stripePublishableKey,
     this.stripeSecretKey,
     this.minDepositAmountCents,
@@ -292,6 +302,8 @@ class BusinessSettingsModel extends Equatable {
     String? bookingPolicyText,
     String? timezone,
     String? googleCalendarId,
+    bool? calendarSyncEnabled,
+    String? calendarSyncProvider,
     String? stripePublishableKey,
     String? stripeSecretKey,
     bool? paymentsEnabled,
@@ -318,6 +330,8 @@ class BusinessSettingsModel extends Equatable {
       bookingPolicyText: bookingPolicyText ?? this.bookingPolicyText,
       timezone: timezone ?? this.timezone,
       googleCalendarId: googleCalendarId ?? this.googleCalendarId,
+      calendarSyncEnabled: calendarSyncEnabled ?? this.calendarSyncEnabled,
+      calendarSyncProvider: calendarSyncProvider ?? this.calendarSyncProvider,
       stripePublishableKey: stripePublishableKey ?? this.stripePublishableKey,
       stripeSecretKey: stripeSecretKey ?? this.stripeSecretKey,
       minDepositAmountCents: minDepositAmountCents ?? this.minDepositAmountCents,
@@ -350,6 +364,8 @@ class BusinessSettingsModel extends Equatable {
         bookingPolicyText,
         timezone,
         googleCalendarId,
+        calendarSyncEnabled,
+        calendarSyncProvider,
         stripePublishableKey,
         minDepositAmountCents,
         cancellationFeeCents,

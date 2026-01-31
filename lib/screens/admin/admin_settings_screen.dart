@@ -2,7 +2,7 @@
  * Filename: admin_settings_screen.dart
  * Purpose: Comprehensive admin settings screen for managing business settings, branding, policies, and integrations
  * Author: Kevin Doyle Jr. / Infinitum Imagery LLC
- * Last Modified: 2025-01-22
+ * Last Modified: 2025-01-30
  * Dependencies: Flutter, cloud_firestore, services, models
  * Platform Compatibility: iOS, Android, Web
  */
@@ -44,6 +44,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   bool _isSaving = false;
   bool _isSuperAdmin = false;
   bool _paymentsEnabled = false;
+  bool _calendarSyncEnabled = false;
+  String _calendarSyncProvider = 'google';
 
   // MARK: - Form Controllers
   final TextEditingController _businessNameController = TextEditingController();
@@ -185,6 +187,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         ? (settings.cancellationFeeCents! / 100).toStringAsFixed(2)
         : '';
     _paymentsEnabled = settings.paymentsEnabled;
+    _calendarSyncEnabled = settings.calendarSyncEnabled;
+    _calendarSyncProvider = settings.calendarSyncProvider ?? 'google';
   }
 
   // MARK: - Save Functionality
@@ -289,6 +293,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       googleCalendarId: _googleCalendarIdController.text.trim().isEmpty 
           ? null 
           : _googleCalendarIdController.text.trim(),
+      calendarSyncEnabled: _calendarSyncEnabled,
+      calendarSyncProvider: _calendarSyncEnabled ? _calendarSyncProvider : null,
       stripePublishableKey: _stripePublishableKeyController.text.trim().isEmpty 
           ? null 
           : _stripePublishableKeyController.text.trim(),
@@ -574,6 +580,158 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
             ),
             const SizedBox(height: 32),
 
+            // MARK: - Calendar Sync Section
+            _buildSectionHeader(
+              title: 'Calendar Sync',
+              icon: Icons.event_available,
+            ),
+            Text(
+              'Sync appointments to your personal calendar so you see them in Google Calendar, Apple Calendar, or Outlook.',
+              style: AppTypography.bodyMedium.copyWith(
+                color: context.themeSecondaryTextColor,
+              ),
+            ),
+            const SizedBox(height: 16),
+            SwitchListTile(
+              title: Text(
+                'Auto-sync appointments to my calendar',
+                style: AppTypography.bodyLarge.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              subtitle: Text(
+                _calendarSyncEnabled
+                    ? 'New and updated appointments will sync to your chosen calendar.'
+                    : 'Turn on to sync appointments to Google, Apple, or another calendar.',
+                style: AppTypography.bodySmall.copyWith(
+                  color: context.themeSecondaryTextColor,
+                ),
+              ),
+              value: _calendarSyncEnabled,
+              onChanged: (value) {
+                setState(() {
+                  _calendarSyncEnabled = value;
+                  AppLogger().logInfo(
+                    'Calendar sync enabled: $value',
+                    tag: 'AdminSettingsScreen',
+                  );
+                });
+              },
+              activeColor: AppColors.sunflowerYellow,
+              secondary: Icon(
+                _calendarSyncEnabled ? Icons.event_available : Icons.event_busy,
+                color: _calendarSyncEnabled
+                    ? Theme.of(context).colorScheme.primary
+                    : context.themeSecondaryTextColor,
+              ),
+            ),
+            if (_calendarSyncEnabled) ...[
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _calendarSyncProvider,
+                decoration: const InputDecoration(
+                  labelText: 'Calendar type',
+                  prefixIcon: Icon(Icons.calendar_month),
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'google',
+                    child: Text('Google Calendar'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'apple',
+                    child: Text('Apple Calendar'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'ics',
+                    child: Text('Other (ICS / Outlook)'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() {
+                      _calendarSyncProvider = value;
+                      AppLogger().logInfo(
+                        'Calendar sync provider: $value',
+                        tag: 'AdminSettingsScreen',
+                      );
+                    });
+                  }
+                },
+              ),
+              if (_calendarSyncProvider == 'google') ...[
+                const SizedBox(height: 16),
+                _buildTextField(
+                  controller: _googleCalendarIdController,
+                  label: 'Google Calendar ID',
+                  icon: Icons.calendar_today,
+                  hint: 'e.g. primary or your@email.com',
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Find your Calendar ID in Google Calendar → Settings → your calendar → Integrate calendar.',
+                  style: AppTypography.bodySmall.copyWith(
+                    color: context.themeSecondaryTextColor,
+                  ),
+                ),
+              ],
+              if (_calendarSyncProvider == 'apple') ...[
+                const SizedBox(height: 16),
+                Card(
+                  color: AppColors.backgroundCream,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Apple Calendar',
+                          style: AppTypography.titleSmall.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Choose "Google Calendar" above and enter your Google account calendar ID to sync. Then in iPhone/iPad: Settings → Calendar → Accounts → Add Account → Google. Your appointments will appear in Apple Calendar.',
+                          style: AppTypography.bodySmall.copyWith(
+                            color: context.themeSecondaryTextColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              if (_calendarSyncProvider == 'ics') ...[
+                const SizedBox(height: 16),
+                Card(
+                  color: AppColors.backgroundCream,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Other calendars (ICS / Outlook)',
+                          style: AppTypography.titleSmall.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Use "Google Calendar" and your Google account, then add that account in Outlook or any app that supports Google Calendar. Or use an ICS subscription link when that feature is added.',
+                          style: AppTypography.bodySmall.copyWith(
+                            color: context.themeSecondaryTextColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ],
+            const SizedBox(height: 32),
+
             // MARK: - Advanced Settings Section
             _buildSectionHeader(
               title: 'Advanced Settings',
@@ -591,13 +749,15 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                 return null;
               },
             ),
-            const SizedBox(height: 16),
-            _buildTextField(
-              controller: _googleCalendarIdController,
-              label: 'Google Calendar ID (Optional)',
-              icon: Icons.calendar_today,
-              hint: 'For calendar sync integration',
-            ),
+            if (!_calendarSyncEnabled || _calendarSyncProvider != 'google') ...[
+              const SizedBox(height: 16),
+              _buildTextField(
+                controller: _googleCalendarIdController,
+                label: 'Google Calendar ID (Optional)',
+                icon: Icons.calendar_today,
+                hint: 'For calendar sync integration',
+              ),
+            ],
             const SizedBox(height: 32),
 
             // MARK: - Payment Integration Section (Super Admin Only)
@@ -1075,3 +1235,4 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
 // - Add timezone picker with search
 // - Add Stripe key validation
 // - Add Google Calendar integration test button
+// - Add ICS subscription URL generation for Apple/Outlook calendar sync
