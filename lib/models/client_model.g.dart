@@ -26,6 +26,7 @@ ClientModel _$ClientModelFromJson(Map<String, dynamic> json) => ClientModel(
       updatedAt: ClientModel._timestampFromJson(json['updatedAt']),
       lastAppointmentAt:
           ClientModel._timestampFromJson(json['lastAppointmentAt']),
+      userId: json['userId'] as String?,
     );
 
 Map<String, dynamic> _$ClientModelToJson(ClientModel instance) =>
@@ -45,6 +46,7 @@ Map<String, dynamic> _$ClientModelToJson(ClientModel instance) =>
       'updatedAt': ClientModel._timestampToJson(instance.updatedAt),
       'lastAppointmentAt':
           ClientModel._timestampToJson(instance.lastAppointmentAt),
+      'userId': instance.userId,
     };
 
 const _$ClientTagEnumMap = {

@@ -56,6 +56,8 @@ BusinessSettingsModel _$BusinessSettingsModelFromJson(
       minDepositAmountCents: (json['minDepositAmountCents'] as num?)?.toInt(),
       cancellationFeeCents: (json['cancellationFeeCents'] as num?)?.toInt(),
       paymentsEnabled: json['paymentsEnabled'] as bool? ?? false,
+      requireComplianceForms: json['requireComplianceForms'] as bool? ?? true,
+      allowSameDayBooking: json['allowSameDayBooking'] as bool? ?? true,
       createdAt: BusinessSettingsModel._timestampFromJson(json['createdAt']),
       updatedAt: BusinessSettingsModel._timestampFromJson(json['updatedAt']),
     );
@@ -90,6 +92,8 @@ Map<String, dynamic> _$BusinessSettingsModelToJson(
       'minDepositAmountCents': instance.minDepositAmountCents,
       'cancellationFeeCents': instance.cancellationFeeCents,
       'paymentsEnabled': instance.paymentsEnabled,
+      'requireComplianceForms': instance.requireComplianceForms,
+      'allowSameDayBooking': instance.allowSameDayBooking,
       'createdAt': BusinessSettingsModel._timestampToJson(instance.createdAt),
       'updatedAt': BusinessSettingsModel._timestampToJson(instance.updatedAt),
     };

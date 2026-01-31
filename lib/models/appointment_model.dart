@@ -137,6 +137,26 @@ class AppointmentModel extends Equatable {
   /// Cancellation and deposit policy acknowledgment
   final bool cancellationPolicyAcknowledged;
 
+  // MARK: - Account Linking & Extended Compliance (additive, backwards compatible)
+  /// Optional user ID when appointment is linked to an account
+  final String? userId;
+  /// Per-item health disclosure detail text or "Not applicable" (key: e.g. skinConditions, allergies)
+  @JsonKey(toJson: _healthDisclosureDetailsToJson, fromJson: _healthDisclosureDetailsFromJson)
+  final Map<String, String>? healthDisclosureDetails;
+  /// UTC timestamp when required acknowledgements were accepted
+  @JsonKey(fromJson: _timestampNullableFromJson, toJson: _timestampToJson)
+  final DateTime? requiredAcknowledgmentsAcceptedAt;
+  /// Cancellation policy snapshot: acknowledged, timestamp, version/hash
+  @JsonKey(toJson: _cancellationPolicySnapshotToJson, fromJson: _cancellationPolicySnapshotFromJson)
+  final CancellationPolicySnapshot? cancellationPolicySnapshot;
+
+  // MARK: - Coupon Fields
+  /// Coupon code applied at booking (null if none)
+  final String? couponCode;
+  /// Total discount amount in cents for this booking (same on all appointments in the booking)
+  @JsonKey(defaultValue: 0)
+  final int discountAmountCents;
+
   // MARK: - Constructor
   const AppointmentModel({
     required this.id,
@@ -169,6 +189,12 @@ class AppointmentModel extends Equatable {
     this.healthDisclosure,
     this.requiredAcknowledgments,
     this.cancellationPolicyAcknowledged = false,
+    this.userId,
+    this.healthDisclosureDetails,
+    this.requiredAcknowledgmentsAcceptedAt,
+    this.cancellationPolicySnapshot,
+    this.couponCode,
+    this.discountAmountCents = 0,
   });
 
   // MARK: - Factory Constructors
@@ -204,6 +230,12 @@ class AppointmentModel extends Equatable {
     HealthDisclosure? healthDisclosure,
     RequiredAcknowledgments? requiredAcknowledgments,
     bool cancellationPolicyAcknowledged = false,
+    String? userId,
+    Map<String, String>? healthDisclosureDetails,
+    DateTime? requiredAcknowledgmentsAcceptedAt,
+    CancellationPolicySnapshot? cancellationPolicySnapshot,
+    String? couponCode,
+    int discountAmountCents = 0,
   }) {
     final now = DateTime.now();
     final endTime = startTime.add(Duration(minutes: durationMinutes));
@@ -232,6 +264,12 @@ class AppointmentModel extends Equatable {
       healthDisclosure: healthDisclosure,
       requiredAcknowledgments: requiredAcknowledgments,
       cancellationPolicyAcknowledged: cancellationPolicyAcknowledged,
+      userId: userId,
+      healthDisclosureDetails: healthDisclosureDetails,
+      requiredAcknowledgmentsAcceptedAt: requiredAcknowledgmentsAcceptedAt,
+      cancellationPolicySnapshot: cancellationPolicySnapshot,
+      couponCode: couponCode,
+      discountAmountCents: discountAmountCents,
     );
   }
 
@@ -337,6 +375,12 @@ class AppointmentModel extends Equatable {
     HealthDisclosure? healthDisclosure,
     RequiredAcknowledgments? requiredAcknowledgments,
     bool? cancellationPolicyAcknowledged,
+    String? userId,
+    Map<String, String>? healthDisclosureDetails,
+    DateTime? requiredAcknowledgmentsAcceptedAt,
+    CancellationPolicySnapshot? cancellationPolicySnapshot,
+    String? couponCode,
+    int? discountAmountCents,
   }) {
     return AppointmentModel(
       id: id ?? this.id,
@@ -369,6 +413,12 @@ class AppointmentModel extends Equatable {
       healthDisclosure: healthDisclosure ?? this.healthDisclosure,
       requiredAcknowledgments: requiredAcknowledgments ?? this.requiredAcknowledgments,
       cancellationPolicyAcknowledged: cancellationPolicyAcknowledged ?? this.cancellationPolicyAcknowledged,
+      userId: userId ?? this.userId,
+      healthDisclosureDetails: healthDisclosureDetails ?? this.healthDisclosureDetails,
+      requiredAcknowledgmentsAcceptedAt: requiredAcknowledgmentsAcceptedAt ?? this.requiredAcknowledgmentsAcceptedAt,
+      cancellationPolicySnapshot: cancellationPolicySnapshot ?? this.cancellationPolicySnapshot,
+      couponCode: couponCode ?? this.couponCode,
+      discountAmountCents: discountAmountCents ?? this.discountAmountCents,
     );
   }
 
@@ -405,6 +455,12 @@ class AppointmentModel extends Equatable {
         healthDisclosure,
         requiredAcknowledgments,
         cancellationPolicyAcknowledged,
+        userId,
+        healthDisclosureDetails,
+        requiredAcknowledgmentsAcceptedAt,
+        cancellationPolicySnapshot,
+        couponCode,
+        discountAmountCents,
       ];
 
   // MARK: - Timestamp Helpers
@@ -418,6 +474,15 @@ class AppointmentModel extends Equatable {
       return DateTime.fromMillisecondsSinceEpoch(timestamp);
     }
     return DateTime.now();
+  }
+
+  /// For optional DateTime? fields: return null when input is null
+  static DateTime? _timestampNullableFromJson(dynamic timestamp) {
+    if (timestamp == null) return null;
+    if (timestamp is Timestamp) return timestamp.toDate();
+    if (timestamp is String) return DateTime.parse(timestamp);
+    if (timestamp is int) return DateTime.fromMillisecondsSinceEpoch(timestamp);
+    return null;
   }
 
   static dynamic _timestampToJson(DateTime? dateTime) {
@@ -486,6 +551,59 @@ class AppointmentModel extends Equatable {
     }
     return null;
   }
+
+  /// Convert healthDisclosureDetails map to JSON
+  static dynamic _healthDisclosureDetailsToJson(Map<String, String>? map) {
+    if (map == null) return null;
+    return map;
+  }
+
+  static Map<String, String>? _healthDisclosureDetailsFromJson(dynamic json) {
+    if (json == null) return null;
+    if (json is Map<String, dynamic>) {
+      return json.map((k, v) => MapEntry(k, v?.toString() ?? ''));
+    }
+    return null;
+  }
+
+  /// Convert CancellationPolicySnapshot to JSON
+  static dynamic _cancellationPolicySnapshotToJson(CancellationPolicySnapshot? s) {
+    if (s == null) return null;
+    return s.toJson();
+  }
+
+  static CancellationPolicySnapshot? _cancellationPolicySnapshotFromJson(dynamic json) {
+    if (json == null) return null;
+    if (json is Map<String, dynamic>) {
+      return CancellationPolicySnapshot.fromJson(json);
+    }
+    return null;
+  }
+}
+
+// MARK: - Cancellation Policy Snapshot
+/// Snapshot of cancellation/no-show policy agreement at submission time
+@JsonSerializable()
+class CancellationPolicySnapshot extends Equatable {
+  final bool acknowledged;
+  @JsonKey(fromJson: AppointmentModel._timestampFromJson, toJson: AppointmentModel._timestampToJson)
+  final DateTime acknowledgedAt;
+  final String? policyVersion;
+  final String? policyTextHash;
+
+  const CancellationPolicySnapshot({
+    required this.acknowledged,
+    required this.acknowledgedAt,
+    this.policyVersion,
+    this.policyTextHash,
+  });
+
+  factory CancellationPolicySnapshot.fromJson(Map<String, dynamic> json) =>
+      _$CancellationPolicySnapshotFromJson(json);
+  Map<String, dynamic> toJson() => _$CancellationPolicySnapshotToJson(this);
+
+  @override
+  List<Object?> get props => [acknowledged, acknowledgedAt, policyVersion, policyTextHash];
 }
 
 // MARK: - Terms Acceptance Metadata

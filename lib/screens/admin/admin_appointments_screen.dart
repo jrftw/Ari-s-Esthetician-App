@@ -9,7 +9,9 @@
 
 // MARK: - Imports
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:table_calendar/table_calendar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
@@ -19,6 +21,12 @@ import '../../core/theme/theme_extensions.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/logging/app_logger.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+// Web-specific imports (conditional for PDF preview/download/print on web)
+import 'dart:html'
+    if (dart.library.io) 'html_stub.dart' as html;
 import '../../models/appointment_model.dart';
 import '../../models/service_model.dart';
 import '../../models/client_model.dart';
@@ -712,9 +720,11 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-              // Action Buttons
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              // Action Buttons: Wrap so they don't overflow on narrow screens and remain tappable
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   if (appointment.status != AppointmentStatus.completed &&
                       appointment.status != AppointmentStatus.canceled)
@@ -912,11 +922,13 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
     );
   }
 
-  /// Show appointment details dialog
+  /// Show appointment details dialog.
+  /// Uses [screenContext] (captured before dialog) for post-pop actions so PDF/status dialogs work after closing.
   Future<void> _showAppointmentDetails(AppointmentModel appointment) async {
+    final screenContext = context;
     await showDialog(
       context: context,
-      builder: (context) => Dialog(
+      builder: (dialogContext) => Dialog(
         child: SingleChildScrollView(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -930,15 +942,15 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
                     Expanded(
                       child: Text(
                         'Appointment Details',
-                        style: AppTypography.headlineSmall.copyWith(
-                          color: context.themePrimaryTextColor,
+                        style: AppTypography.titleLarge.copyWith(
+                          color: dialogContext.themePrimaryTextColor,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
                     IconButton(
                       icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: () => Navigator.of(dialogContext).pop(),
                     ),
                   ],
                 ),
@@ -998,26 +1010,59 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
                       ),
                     ],
                   ),
+                const SizedBox(height: 20),
+                const Divider(),
+                const SizedBox(height: 12),
+                // Compliance sections: only show when appointment has compliance data (backwards compatible)
+                if (_appointmentHasComplianceData(appointment)) ...[
+                  _buildDetailSectionTitle('Health & Skin Disclosure'),
+                  const SizedBox(height: 6),
+                  _buildAppointmentDisclosureContent(appointment),
+                  const SizedBox(height: 16),
+                  _buildDetailSectionTitle('Required Acknowledgements'),
+                  const SizedBox(height: 6),
+                  _buildAppointmentAcknowledgementsContent(appointment),
+                  const SizedBox(height: 16),
+                  _buildDetailSectionTitle('Cancellation / No-Show Policy'),
+                  const SizedBox(height: 6),
+                  _buildAppointmentCancellationContent(appointment),
+                  const SizedBox(height: 16),
+                  _buildDetailSectionTitle('Terms & Conditions'),
+                  const SizedBox(height: 6),
+                  _buildAppointmentTermsContent(appointment),
+                  const SizedBox(height: 12),
+                ],
+                _buildDetailRow('Created', _formatDateTime(appointment.createdAt)),
+                _buildDetailRow('Updated', _formatDateTime(appointment.updatedAt)),
                 const SizedBox(height: 24),
-                // Actions
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                // Actions: Wrap so buttons don't overflow on narrow screens and remain tappable
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
+                    TextButton.icon(
+                      onPressed: () {
+                        Navigator.of(dialogContext).pop();
+                        if (mounted) _showPDFFormatChoice(screenContext, appointment);
+                      },
+                      icon: const Icon(Icons.picture_as_pdf, size: 20),
+                      label: const Text('Preview / Print PDF'),
+                    ),
                     if (appointment.status != AppointmentStatus.completed &&
                         appointment.status != AppointmentStatus.canceled)
                       TextButton(
                         onPressed: () {
-                          Navigator.of(context).pop();
-                          _showStatusUpdateDialog(appointment);
+                          Navigator.of(dialogContext).pop();
+                          if (mounted) _showStatusUpdateDialog(appointment);
                         },
                         child: const Text('Update Status'),
                       ),
-                    const SizedBox(width: 8),
                     ElevatedButton(
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: () => Navigator.of(dialogContext).pop(),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.sunflowerYellow,
-                        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                        foregroundColor: Theme.of(dialogContext).colorScheme.onPrimary,
                       ),
                       child: const Text('Close'),
                     ),
@@ -1029,6 +1074,464 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
         ),
       ),
     );
+  }
+
+  /// Generate PDF for a single appointment (client, details, disclosures, acknowledgements, policy).
+  /// [includeSignatureForm] adds a second page with printed name, signature line, and date for wet signature.
+  /// Uses app theme: sunflower yellow, dark brown, soft cream. Null-safe for legacy appointments.
+  Future<void> _generateAppointmentPDF(BuildContext context, AppointmentModel appointment, {bool includeSignatureForm = false}) async {
+    if (!context.mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Generating PDF...'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    try {
+      AppLogger().logLoading('Generating appointment PDF', tag: 'AdminAppointmentsScreen');
+      final pdf = pw.Document();
+      // App theme colors (app_colors.dart: sunflower, dark brown, soft cream)
+      final sunflowerYellow = PdfColor.fromHex('#FFD700');
+      final darkBrown = PdfColor.fromHex('#5D4037');
+      final softCream = PdfColor.fromHex('#FFF8E1');
+      final textPrimary = PdfColor.fromHex('#5D4037');
+      final textSecondary = PdfColor.fromHex('#8D6E63');
+
+      String na(String? v) => (v == null || v.isEmpty) ? '—' : v;
+      String fmt(DateTime? d) => d == null ? '—' : DateFormat.yMd().add_Hm().format(d);
+
+      pw.Widget wrapSection(String title, List<pw.Widget> children) {
+        return pw.Container(
+          margin: const pw.EdgeInsets.only(bottom: 20),
+          padding: const pw.EdgeInsets.all(16),
+          decoration: pw.BoxDecoration(
+            color: softCream,
+            borderRadius: pw.BorderRadius.circular(8),
+            border: pw.Border.all(color: sunflowerYellow, width: 1),
+          ),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Container(
+                padding: const pw.EdgeInsets.only(bottom: 8),
+                decoration: const pw.BoxDecoration(
+                  border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: 1)),
+                ),
+                child: pw.Text(
+                  title,
+                  style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: darkBrown),
+                ),
+              ),
+              pw.SizedBox(height: 8),
+              ...children,
+            ],
+          ),
+        );
+      }
+
+      pw.Widget row(String label, String value) {
+        return pw.Padding(
+          padding: const pw.EdgeInsets.only(bottom: 6),
+          child: pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.SizedBox(
+                width: 110,
+                child: pw.Text(label, style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: textSecondary)),
+              ),
+              pw.Expanded(
+                child: pw.Text(value, style: pw.TextStyle(fontSize: 11, color: textPrimary)),
+              ),
+            ],
+          ),
+        );
+      }
+
+      final content = [
+        // Header
+        pw.Container(
+          padding: const pw.EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+          decoration: pw.BoxDecoration(
+            color: sunflowerYellow,
+            borderRadius: pw.BorderRadius.circular(8),
+          ),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'Appointment Record',
+                    style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: darkBrown),
+                  ),
+                  pw.SizedBox(height: 4),
+                  pw.Text(
+                    'Generated ${DateFormat.yMd().format(DateTime.now())}',
+                    style: pw.TextStyle(fontSize: 10, color: textSecondary),
+                  ),
+                ],
+              ),
+              pw.Container(
+                width: 48,
+                height: 48,
+                decoration: pw.BoxDecoration(color: darkBrown, shape: pw.BoxShape.circle),
+                child: pw.Center(
+                  child: pw.Text('A', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        pw.SizedBox(height: 24),
+        wrapSection('Client information', [
+          row('Name', '${appointment.clientFirstName} ${appointment.clientLastName}'),
+          row('Email', appointment.clientEmail),
+          row('Phone', appointment.clientPhone),
+        ]),
+        wrapSection('Appointment details', [
+          row('Date & time', fmt(appointment.startTime)),
+          row('Duration', '${appointment.serviceSnapshot?.durationMinutes ?? 0} minutes'),
+          row('Service', appointment.serviceSnapshot?.name ?? na(appointment.serviceId)),
+          row('Status', appointment.status.name),
+          row('Deposit', appointment.formattedDeposit),
+          if (appointment.intakeNotes != null && appointment.intakeNotes!.isNotEmpty)
+            row('Client notes', appointment.intakeNotes!),
+        ]),
+        // Standard PDF: only include compliance sections when appointment has that data (backwards compatible)
+        if (_appointmentHasComplianceData(appointment)) ...[
+          wrapSection('Health & Skin Disclosure', [
+            if (appointment.healthDisclosureDetails != null && appointment.healthDisclosureDetails!.isNotEmpty)
+              ...appointment.healthDisclosureDetails!.entries.map((e) => pw.Padding(
+                padding: const pw.EdgeInsets.only(bottom: 4),
+                child: pw.Text('• ${e.key}: ${e.value}', style: pw.TextStyle(fontSize: 11, color: textPrimary)),
+              ))
+            else if (appointment.healthDisclosure != null)
+              pw.Text(
+                'Skin conditions: ${appointment.healthDisclosure!.hasSkinConditions}; Allergies: ${appointment.healthDisclosure!.hasAllergies}; Medications: ${appointment.healthDisclosure!.hasCurrentMedications}; Pregnant/breastfeeding: ${appointment.healthDisclosure!.isPregnantOrBreastfeeding}; Recent treatments: ${appointment.healthDisclosure!.hasRecentCosmeticTreatments}; Known reactions: ${appointment.healthDisclosure!.hasKnownReactions}. Notes: ${na(appointment.healthDisclosure!.additionalNotes)}',
+                style: pw.TextStyle(fontSize: 11, color: textPrimary),
+              )
+            else
+              pw.Text('—', style: pw.TextStyle(fontSize: 11, color: textSecondary)),
+          ]),
+          wrapSection('Required Acknowledgements', [
+            if (appointment.requiredAcknowledgments != null)
+              pw.Text(
+                'All acknowledged: ${appointment.requiredAcknowledgments!.allAcknowledged}. Accepted at: ${fmt(appointment.requiredAcknowledgmentsAcceptedAt)}',
+                style: pw.TextStyle(fontSize: 11, color: textPrimary),
+              )
+            else
+              pw.Text('—', style: pw.TextStyle(fontSize: 11, color: textSecondary)),
+          ]),
+          wrapSection('Cancellation / No-Show Policy', [
+            if (appointment.cancellationPolicySnapshot != null)
+              pw.Text(
+                'Acknowledged: ${appointment.cancellationPolicySnapshot!.acknowledged}. At: ${fmt(appointment.cancellationPolicySnapshot!.acknowledgedAt)}. Version: ${na(appointment.cancellationPolicySnapshot!.policyVersion)}',
+                style: pw.TextStyle(fontSize: 11, color: textPrimary),
+              )
+            else
+              pw.Text('Acknowledged: ${appointment.cancellationPolicyAcknowledged} (legacy)', style: pw.TextStyle(fontSize: 11, color: textPrimary)),
+          ]),
+          wrapSection('Terms & Conditions', [
+            if (appointment.termsAcceptanceMetadata != null)
+              pw.Text(
+                'Accepted: ${appointment.termsAcceptanceMetadata!.termsAccepted}. At (UTC): ${fmt(appointment.termsAcceptanceMetadata!.termsAcceptedAtUtc)}',
+                style: pw.TextStyle(fontSize: 11, color: textPrimary),
+              )
+            else
+              pw.Text('—', style: pw.TextStyle(fontSize: 11, color: textSecondary)),
+          ]),
+        ],
+        pw.Container(
+          padding: const pw.EdgeInsets.symmetric(vertical: 8),
+          child: pw.Text(
+            'Record created: ${fmt(appointment.createdAt)}  •  Last updated: ${fmt(appointment.updatedAt)}',
+            style: pw.TextStyle(fontSize: 9, color: textSecondary),
+          ),
+        ),
+      ];
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(36),
+          build: (pw.Context ctx) => content,
+        ),
+      );
+
+      if (includeSignatureForm) {
+        // PDF with signature form: same content as standard (everything user filled) plus a signature page
+        // with the four compliance sections as blank fields and wet signature (Printed name, Signature, Date).
+        pw.Widget blankLine() => pw.Container(
+          width: double.infinity,
+          height: 20,
+          margin: const pw.EdgeInsets.only(bottom: 8),
+          decoration: pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey400))),
+        );
+        pdf.addPage(
+          pw.MultiPage(
+            pageFormat: PdfPageFormat.a4,
+            margin: const pw.EdgeInsets.all(36),
+            build: (pw.Context ctx) {
+              return [
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  decoration: pw.BoxDecoration(
+                    color: sunflowerYellow,
+                    borderRadius: pw.BorderRadius.circular(8),
+                  ),
+                  child: pw.Text(
+                    'Client signature (wet signature) — Complete in person',
+                    style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: darkBrown),
+                  ),
+                ),
+                pw.SizedBox(height: 16),
+                wrapSection('Appointment & client (from booking)', [
+                  row('Client', '${appointment.clientFirstName} ${appointment.clientLastName}'),
+                  row('Email / phone', '${appointment.clientEmail}  •  ${appointment.clientPhone}'),
+                  row('Date & time', fmt(appointment.startTime)),
+                  row('Service', appointment.serviceSnapshot?.name ?? na(appointment.serviceId)),
+                  row('Duration', '${appointment.serviceSnapshot?.durationMinutes ?? 0} minutes'),
+                ]),
+                wrapSection('Health & Skin Disclosure', [blankLine()]),
+                wrapSection('Required Acknowledgements', [blankLine()]),
+                wrapSection('Terms & Conditions', [blankLine()]),
+                wrapSection('Cancellation & No-Show Policy', [blankLine()]),
+                pw.Container(
+                  margin: const pw.EdgeInsets.only(top: 16, bottom: 16),
+                  padding: const pw.EdgeInsets.all(12),
+                  decoration: pw.BoxDecoration(
+                    color: softCream,
+                    border: pw.Border.all(color: darkBrown, width: 1),
+                    borderRadius: pw.BorderRadius.circular(6),
+                  ),
+                  child: pw.Text(
+                    'By signing below, I confirm the accuracy of the information above and my agreement to the Terms & Conditions, Health & Skin Disclosure, Required Acknowledgements, and Cancellation/No-Show Policy.',
+                    style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: darkBrown),
+                  ),
+                ),
+                pw.Text('Printed name:', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: darkBrown)),
+                pw.SizedBox(height: 4),
+                pw.Container(
+                  width: double.infinity,
+                  height: 22,
+                  decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey400)),
+                ),
+                pw.SizedBox(height: 20),
+                pw.Text('Signature:', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: darkBrown)),
+                pw.SizedBox(height: 4),
+                pw.Container(
+                  width: double.infinity,
+                  height: 56,
+                  decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey400)),
+                ),
+                pw.SizedBox(height: 20),
+                pw.Text('Date:', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: darkBrown)),
+                pw.SizedBox(height: 4),
+                pw.Container(
+                  width: 160,
+                  height: 22,
+                  decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey400)),
+                ),
+                pw.SizedBox(height: 20),
+                pw.Text(
+                  'Print and have the client sign in person. Retain for your records.',
+                  style: pw.TextStyle(fontSize: 9, color: textSecondary),
+                ),
+              ];
+            },
+          ),
+        );
+      }
+
+      final pdfBytes = await pdf.save();
+      if (!context.mounted) return;
+      Navigator.of(context).pop();
+      // MARK: - Platform-specific PDF preview/print (web: blob URL options; mobile: printing package)
+      if (kIsWeb) {
+        await _handleAppointmentWebPDF(context, pdfBytes, appointment);
+      } else {
+        await _handleAppointmentMobilePDF(context, pdfBytes);
+      }
+      AppLogger().logSuccess('Appointment PDF shown', tag: 'AdminAppointmentsScreen');
+    } catch (e, stackTrace) {
+      AppLogger().logError('Failed to generate appointment PDF', tag: 'AdminAppointmentsScreen', error: e, stackTrace: stackTrace);
+      if (context.mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to generate PDF: $e'), backgroundColor: AppColors.errorRed),
+        );
+      }
+    }
+  }
+
+  // MARK: - Web PDF Handler (Appointments)
+  /// Handles PDF preview, download, and print for web platform.
+  /// Shows dialog with Preview / Download / Print so Standard PDF and PDF with signature form both work on web.
+  Future<void> _handleAppointmentWebPDF(BuildContext context, Uint8List pdfBytes, AppointmentModel appointment) async {
+    if (!kIsWeb) return;
+    try {
+      final action = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Preview / Print PDF'),
+          content: const Text(
+            'Choose an action:\n\n'
+            '• Preview: View PDF in browser\n'
+            '• Download: Save PDF to device\n'
+            '• Print: Print PDF directly',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('preview'),
+              child: const Text('Preview'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('download'),
+              child: const Text('Download'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('print'),
+              child: const Text('Print'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      );
+      if (action == null) return;
+
+      final dateStr = DateFormat('yyyy-MM-dd').format(appointment.startTime);
+      final safeName = appointment.clientLastName.replaceAll(RegExp(r'[^\w\s-]'), '').trim();
+      final filename = 'appointment_${safeName.isEmpty ? "record" : safeName}_$dateStr.pdf';
+
+      final blob = html.Blob([pdfBytes]);
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      final anchor = html.AnchorElement(href: url)
+        ..target = '_blank'
+        ..download = filename;
+
+      switch (action) {
+        case 'preview':
+          anchor.target = '_blank';
+          anchor.download = null;
+          anchor.click();
+          html.Url.revokeObjectUrl(url);
+          AppLogger().logSuccess('Appointment PDF preview opened in browser', tag: 'AdminAppointmentsScreen');
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('PDF opened in new tab for preview'),
+                backgroundColor: AppColors.successGreen,
+              ),
+            );
+          }
+          break;
+        case 'download':
+          anchor.click();
+          html.Url.revokeObjectUrl(url);
+          AppLogger().logSuccess('Appointment PDF download started', tag: 'AdminAppointmentsScreen');
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('PDF download started'),
+                backgroundColor: AppColors.successGreen,
+              ),
+            );
+          }
+          break;
+        case 'print':
+          final iframe = html.IFrameElement()
+            ..src = url
+            ..style?.display = 'none';
+          html.document.body?.append(iframe);
+          iframe.onLoad.listen((_) {
+            Future.delayed(const Duration(milliseconds: 300), () {
+              html.window.print();
+              iframe.remove();
+              html.Url.revokeObjectUrl(url);
+            });
+          });
+          AppLogger().logSuccess('Appointment PDF print dialog opened', tag: 'AdminAppointmentsScreen');
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Print dialog will open shortly'),
+                backgroundColor: AppColors.successGreen,
+              ),
+            );
+          }
+          break;
+      }
+    } catch (e, stackTrace) {
+      AppLogger().logError('Failed to handle web appointment PDF', tag: 'AdminAppointmentsScreen', error: e, stackTrace: stackTrace);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: AppColors.errorRed),
+        );
+      }
+    }
+  }
+
+  // MARK: - Mobile PDF Handler (Appointments)
+  /// Handles PDF preview and sharing for mobile (iOS/Android). Uses printing package; fallback to sharePdf.
+  Future<void> _handleAppointmentMobilePDF(BuildContext context, Uint8List pdfBytes) async {
+    try {
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdfBytes,
+        format: PdfPageFormat.a4,
+      );
+      AppLogger().logSuccess('Appointment PDF preview shown on mobile', tag: 'AdminAppointmentsScreen');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('PDF ready! Use the preview to share, save, or print.'),
+            backgroundColor: AppColors.successGreen,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e, stackTrace) {
+      AppLogger().logError('Failed to handle mobile appointment PDF', tag: 'AdminAppointmentsScreen', error: e, stackTrace: stackTrace);
+      try {
+        final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+        await Printing.sharePdf(
+          bytes: pdfBytes,
+          filename: 'appointment_$dateStr.pdf',
+        );
+        AppLogger().logSuccess('Appointment PDF shared (fallback)', tag: 'AdminAppointmentsScreen');
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('PDF shared successfully'),
+              backgroundColor: AppColors.successGreen,
+            ),
+          );
+        }
+      } catch (shareError) {
+        AppLogger().logError('Both appointment PDF methods failed', tag: 'AdminAppointmentsScreen', error: shareError);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: AppColors.errorRed),
+          );
+        }
+      }
+    }
   }
 
   /// Show create appointment dialog
@@ -1695,6 +2198,127 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
   }
 
   // MARK: - Helper Widgets
+  /// Section title for appointment detail (matches PDF sections)
+  Widget _buildDetailSectionTitle(String title) {
+    return Text(
+      title,
+      style: AppTypography.titleSmall.copyWith(
+        color: context.themePrimaryTextColor,
+        fontWeight: FontWeight.bold,
+      ),
+    );
+  }
+
+  String _na(String? v) => (v == null || v.isEmpty) ? '—' : v;
+
+  /// Returns true if the appointment has any compliance data (Health & Skin, Acknowledgements, Cancellation, Terms).
+  /// Used to show or hide compliance sections in detail dialog and PDF (backwards compatible).
+  bool _appointmentHasComplianceData(AppointmentModel appointment) {
+    final hasHealth = (appointment.healthDisclosureDetails != null && appointment.healthDisclosureDetails!.isNotEmpty) ||
+        appointment.healthDisclosure != null;
+    final hasAcknowledgments = appointment.requiredAcknowledgments != null || appointment.requiredAcknowledgmentsAcceptedAt != null;
+    final hasCancellation = appointment.cancellationPolicySnapshot != null || appointment.cancellationPolicyAcknowledged;
+    final hasTerms = appointment.termsAcceptanceMetadata != null;
+    return hasHealth || hasAcknowledgments || hasCancellation || hasTerms;
+  }
+
+  Widget _buildAppointmentDisclosureContent(AppointmentModel appointment) {
+    if (appointment.healthDisclosureDetails != null && appointment.healthDisclosureDetails!.isNotEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: appointment.healthDisclosureDetails!.entries.map((e) {
+          final label = e.key.replaceFirstMapped(RegExp(r'^.'), (m) => m.group(0)!.toUpperCase()).replaceAllMapped(RegExp(r'([A-Z])'), (m) => ' ${m.group(0)}').trim();
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text('• $label: ${e.value}', style: AppTypography.bodySmall.copyWith(color: context.themePrimaryTextColor)),
+          );
+        }).toList(),
+      );
+    }
+    if (appointment.healthDisclosure != null) {
+      final h = appointment.healthDisclosure!;
+      return Text(
+        'Skin conditions: ${h.hasSkinConditions}; Allergies: ${h.hasAllergies}; Medications: ${h.hasCurrentMedications}; Pregnant/breastfeeding: ${h.isPregnantOrBreastfeeding}; Recent treatments: ${h.hasRecentCosmeticTreatments}; Known reactions: ${h.hasKnownReactions}. Notes: ${_na(h.additionalNotes)}',
+        style: AppTypography.bodySmall.copyWith(color: context.themePrimaryTextColor),
+      );
+    }
+    return Text('—', style: AppTypography.bodySmall.copyWith(color: context.themeSecondaryTextColor));
+  }
+
+  Widget _buildAppointmentAcknowledgementsContent(AppointmentModel appointment) {
+    if (appointment.requiredAcknowledgments != null) {
+      final acceptedAt = appointment.requiredAcknowledgmentsAcceptedAt != null
+          ? _formatDateTime(appointment.requiredAcknowledgmentsAcceptedAt!)
+          : '—';
+      return Text(
+        'All acknowledged: ${appointment.requiredAcknowledgments!.allAcknowledged}. Accepted at: $acceptedAt',
+        style: AppTypography.bodySmall.copyWith(color: context.themePrimaryTextColor),
+      );
+    }
+    return Text('—', style: AppTypography.bodySmall.copyWith(color: context.themeSecondaryTextColor));
+  }
+
+  Widget _buildAppointmentCancellationContent(AppointmentModel appointment) {
+    if (appointment.cancellationPolicySnapshot != null) {
+      final s = appointment.cancellationPolicySnapshot!;
+      return Text(
+        'Acknowledged: ${s.acknowledged}. At: ${_formatDateTime(s.acknowledgedAt)}. Version: ${_na(s.policyVersion)}',
+        style: AppTypography.bodySmall.copyWith(color: context.themePrimaryTextColor),
+      );
+    }
+    return Text(
+      'Acknowledged: ${appointment.cancellationPolicyAcknowledged} (legacy)',
+      style: AppTypography.bodySmall.copyWith(color: context.themePrimaryTextColor),
+    );
+  }
+
+  Widget _buildAppointmentTermsContent(AppointmentModel appointment) {
+    if (appointment.termsAcceptanceMetadata != null) {
+      final t = appointment.termsAcceptanceMetadata!;
+      return Text(
+        'Accepted: ${t.termsAccepted}. At (UTC): ${_formatDateTime(t.termsAcceptedAtUtc)}',
+        style: AppTypography.bodySmall.copyWith(color: context.themePrimaryTextColor),
+      );
+    }
+    return Text('—', style: AppTypography.bodySmall.copyWith(color: context.themeSecondaryTextColor));
+  }
+
+  /// Show choice: Standard PDF or PDF with signature form for wet signature
+  Future<void> _showPDFFormatChoice(BuildContext context, AppointmentModel appointment) async {
+    if (!context.mounted) return;
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Choose PDF format'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Standard: Full appointment details for preview or print.'),
+            SizedBox(height: 12),
+            Text('With signature form: Same content plus a signature page you can print and have the client sign in person (wet signature).'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop('standard'),
+            child: const Text('Standard PDF'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop('signature'),
+            child: const Text('PDF with signature form'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+    if (choice == null || !context.mounted) return;
+    await _generateAppointmentPDF(context, appointment, includeSignatureForm: choice == 'signature');
+  }
+
   /// Build detail row widget
   Widget _buildDetailRow(String label, String value) {
     return Padding(

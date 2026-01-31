@@ -29,6 +29,7 @@ import '../../screens/admin/admin_earnings_screen.dart';
 import '../../screens/admin/admin_notifications_screen.dart';
 import '../../screens/admin/admin_software_enhancements_screen.dart';
 import '../../screens/admin/admin_time_off_screen.dart';
+import '../../screens/admin/admin_coupons_screen.dart';
 import '../../screens/auth/login_screen.dart';
 import '../../screens/auth/signup_screen.dart';
 import '../../screens/splash_screen.dart';
@@ -240,6 +241,11 @@ class AppRouter {
               path: AppConstants.routeAdminTimeOff,
               name: 'admin-time-off',
               builder: (context, state) => const AdminTimeOffScreen(),
+            ),
+            GoRoute(
+              path: AppConstants.routeAdminCoupons,
+              name: 'admin-coupons',
+              builder: (context, state) => const AdminCouponsScreen(),
             ),
 
             // MARK: - Settings Route (General)

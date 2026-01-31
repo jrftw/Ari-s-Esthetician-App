@@ -14,6 +14,7 @@ import 'dart:async';
 import '../core/logging/app_logger.dart';
 import '../core/constants/app_constants.dart';
 import 'preferences_service.dart';
+import 'firestore_service.dart';
 import '../models/client_model.dart';
 
 // MARK: - User Role Enum
@@ -30,6 +31,7 @@ enum UserRole {
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirestoreService _firestoreService = FirestoreService();
 
   // MARK: - Auth State Stream
   /// Stream of authentication state changes
@@ -119,15 +121,31 @@ class AuthService {
                 lastName: '', // Will be updated on first booking
                 email: email,
                 phone: '', // Will be updated on first booking
+                userId: userCredential.user!.uid,
               );
 
-              await _firestore
+              final docRef = await _firestore
                   .collection(AppConstants.firestoreClientsCollection)
                   .add(client.toFirestore());
 
               AppLogger().logInfo('Client record created for: $email', tag: 'AuthService');
             } else {
               AppLogger().logInfo('Client record already exists for: $email', tag: 'AuthService');
+            }
+            // Account linking: set userId on client and all appointments with this email
+            try {
+              await _firestoreService.linkClientAndAppointmentsToUser(
+                uid: userCredential.user!.uid,
+                email: email,
+              );
+            } catch (e, stackTrace) {
+              AppLogger().logError(
+                'Account linking failed (client/appointments may not show userId)',
+                tag: 'AuthService',
+                error: e,
+                stackTrace: stackTrace,
+              );
+              // Don't fail signup if linking fails; history still loads by email
             }
           } catch (e, stackTrace) {
             // Log error but don't fail signup if client creation fails

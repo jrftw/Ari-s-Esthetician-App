@@ -17,6 +17,9 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 
+const db = admin.firestore();
+const CLIENTS_COLLECTION = 'clients';
+
 // MARK: - Helper Functions
 /**
  * Get Stripe secret key from Firebase config or environment variable
@@ -242,6 +245,76 @@ exports.validatePaymentIntent = functions.https.onCall(async (data, context) => 
     }
   }
 });
+
+// MARK: - Directory Sync (Guest Checkout)
+// When an appointment is created (guest or logged-in), sync client to clients collection
+// so directory is reliably updated. Runs with Admin SDK (no security rules).
+// Idempotent: match by email; create or update.
+function ariSyncClientFromAppointmentData(data) {
+  const firstName = data.clientFirstName || '';
+  const lastName = data.clientLastName || '';
+  const email = (data.clientEmail || '').trim();
+  const phone = data.clientPhone || '';
+  if (!email) {
+    console.warn('ariSyncClientFromAppointment: missing clientEmail, skipping sync');
+    return Promise.resolve();
+  }
+  return db.collection(CLIENTS_COLLECTION)
+    .where('email', '==', email)
+    .limit(1)
+    .get()
+    .then((snapshot) => {
+      const now = admin.firestore.FieldValue.serverTimestamp();
+      if (snapshot.empty) {
+        return db.collection(CLIENTS_COLLECTION).add({
+          firstName,
+          lastName,
+          email,
+          phone,
+          totalAppointments: 1,
+          completedAppointments: 0,
+          noShowCount: 0,
+          totalSpentCents: 0,
+          createdAt: now,
+          updatedAt: now,
+        }).then((ref) => {
+          console.log('ariSyncClientFromAppointment: client created', ref.id, email);
+        });
+      }
+      const doc = snapshot.docs[0];
+      const existing = doc.data();
+      const updates = {
+        updatedAt: now,
+        totalAppointments: (existing.totalAppointments || 0) + 1,
+      };
+      if (firstName && (!existing.firstName || existing.firstName === '')) {
+        updates.firstName = firstName;
+      }
+      if (lastName && (!existing.lastName || existing.lastName === '')) {
+        updates.lastName = lastName;
+      }
+      if (phone && (!existing.phone || existing.phone === '')) {
+        updates.phone = phone;
+      }
+      return doc.ref.update(updates).then(() => {
+        console.log('ariSyncClientFromAppointment: client updated', doc.id, email);
+      });
+    })
+    .catch((err) => {
+      console.error('ariSyncClientFromAppointment: sync failed', email, err);
+      // Do not throw so appointment create is not rolled back
+    });
+}
+
+exports.onAppointmentCreated = functions.firestore
+  .document('appointments/{appointmentId}')
+  .onCreate((snap, context) => {
+    if (!snap || !snap.data) {
+      return Promise.resolve();
+    }
+    const data = snap.data();
+    return ariSyncClientFromAppointmentData(data);
+  });
 
 // Suggestions For Features and Additions Later:
 // - Add webhook handler for Stripe events (payment succeeded, failed, etc.)

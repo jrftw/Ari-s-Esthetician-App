@@ -100,6 +100,9 @@ class AppConstants {
   /// Time-off collection name
   static const String firestoreTimeOffCollection = "time_off";
 
+  /// Coupons collection name (booking discount codes)
+  static const String firestoreCouponsCollection = "coupons";
+
   // MARK: - Storage Paths
   /// Logo storage path
   static const String storageLogoPath = "business/logo";
@@ -152,6 +155,9 @@ class AppConstants {
   
   /// Admin time-off route
   static const String routeAdminTimeOff = "/admin/time-off";
+
+  /// Admin coupons route
+  static const String routeAdminCoupons = "/admin/coupons";
   
   /// General settings route (accessible to all users)
   static const String routeSettings = "/settings";

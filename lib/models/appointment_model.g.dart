@@ -50,6 +50,18 @@ AppointmentModel _$AppointmentModelFromJson(Map<String, dynamic> json) =>
               json['requiredAcknowledgments']),
       cancellationPolicyAcknowledged:
           json['cancellationPolicyAcknowledged'] as bool? ?? false,
+      userId: json['userId'] as String?,
+      healthDisclosureDetails:
+          AppointmentModel._healthDisclosureDetailsFromJson(
+              json['healthDisclosureDetails']),
+      requiredAcknowledgmentsAcceptedAt:
+          AppointmentModel._timestampNullableFromJson(
+              json['requiredAcknowledgmentsAcceptedAt']),
+      cancellationPolicySnapshot:
+          AppointmentModel._cancellationPolicySnapshotFromJson(
+              json['cancellationPolicySnapshot']),
+      couponCode: json['couponCode'] as String?,
+      discountAmountCents: (json['discountAmountCents'] as num?)?.toInt() ?? 0,
     );
 
 Map<String, dynamic> _$AppointmentModelToJson(AppointmentModel instance) =>
@@ -93,6 +105,17 @@ Map<String, dynamic> _$AppointmentModelToJson(AppointmentModel instance) =>
           AppointmentModel._requiredAcknowledgmentsToJson(
               instance.requiredAcknowledgments),
       'cancellationPolicyAcknowledged': instance.cancellationPolicyAcknowledged,
+      'userId': instance.userId,
+      'healthDisclosureDetails':
+          AppointmentModel._healthDisclosureDetailsToJson(
+              instance.healthDisclosureDetails),
+      'requiredAcknowledgmentsAcceptedAt': AppointmentModel._timestampToJson(
+          instance.requiredAcknowledgmentsAcceptedAt),
+      'cancellationPolicySnapshot':
+          AppointmentModel._cancellationPolicySnapshotToJson(
+              instance.cancellationPolicySnapshot),
+      'couponCode': instance.couponCode,
+      'discountAmountCents': instance.discountAmountCents,
     };
 
 const _$AppointmentStatusEnumMap = {
@@ -102,6 +125,26 @@ const _$AppointmentStatusEnumMap = {
   AppointmentStatus.noShow: 'no_show',
   AppointmentStatus.canceled: 'canceled',
 };
+
+CancellationPolicySnapshot _$CancellationPolicySnapshotFromJson(
+        Map<String, dynamic> json) =>
+    CancellationPolicySnapshot(
+      acknowledged: json['acknowledged'] as bool,
+      acknowledgedAt:
+          AppointmentModel._timestampFromJson(json['acknowledgedAt']),
+      policyVersion: json['policyVersion'] as String?,
+      policyTextHash: json['policyTextHash'] as String?,
+    );
+
+Map<String, dynamic> _$CancellationPolicySnapshotToJson(
+        CancellationPolicySnapshot instance) =>
+    <String, dynamic>{
+      'acknowledged': instance.acknowledged,
+      'acknowledgedAt':
+          AppointmentModel._timestampToJson(instance.acknowledgedAt),
+      'policyVersion': instance.policyVersion,
+      'policyTextHash': instance.policyTextHash,
+    };
 
 TermsAcceptanceMetadata _$TermsAcceptanceMetadataFromJson(
         Map<String, dynamic> json) =>

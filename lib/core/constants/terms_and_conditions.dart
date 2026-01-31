@@ -124,6 +124,9 @@ If any provision of these Terms is held invalid or unenforceable, the remaining 
   static const String consentText = 
       'By booking, I acknowledge and agree to the Terms & Conditions, including informed consent, assumption of risk, and release of liability.';
 
+  /// Cancellation/no-show policy version for snapshot at submission time
+  static const String cancellationPolicyVersion = '1.0';
+
   /// Get formatted terms for display in UI
   static String getFormattedTerms() {
     return fullText;

@@ -18,10 +18,11 @@ import '../../core/theme/theme_extensions.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/logging/app_logger.dart';
-import '../../core/logging/app_logger.dart';
 import '../../models/appointment_model.dart';
 import '../../services/firestore_service.dart';
 import '../../services/payment_service.dart';
+import '../../services/view_mode_service.dart';
+import '../../services/auth_service.dart';
 
 // MARK: - Client Confirmation Screen
 /// Screen displayed after successful appointment booking
@@ -42,9 +43,12 @@ class ClientConfirmationScreen extends StatefulWidget {
 class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final PaymentService _paymentService = PaymentService();
+  final ViewModeService _viewModeService = ViewModeService.instance;
+  final AuthService _authService = AuthService();
   AppointmentModel? _appointment;
   bool _isLoading = true;
   String? _errorMessage;
+  bool _isAdminViewingAsClient = false;
   
   // MARK: - Post-Appointment Tip State
   bool _showTipDialog = false;
@@ -66,6 +70,41 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
     super.initState();
     logUI('ClientConfirmationScreen initState called', tag: 'ClientConfirmationScreen');
     _loadAppointment();
+    _checkAdminViewMode();
+    _viewModeService.addListener(_onViewModeChanged);
+  }
+  
+  @override
+  void dispose() {
+    _viewModeService.removeListener(_onViewModeChanged);
+    _postTipAmountController.dispose();
+    _tipCardNumberController.dispose();
+    _tipExpiryMonthController.dispose();
+    _tipExpiryYearController.dispose();
+    _tipCvcController.dispose();
+    _tipCardholderNameController.dispose();
+    super.dispose();
+  }
+  
+  // MARK: - Admin View Mode (View as Client)
+  /// Check if current user is admin viewing as client
+  Future<void> _checkAdminViewMode() async {
+    try {
+      final isAdmin = await _authService.isAdmin();
+      final isViewingAsClient = _viewModeService.isViewingAsClient;
+      if (mounted) {
+        setState(() {
+          _isAdminViewingAsClient = isAdmin && isViewingAsClient;
+        });
+      }
+    } catch (e, stackTrace) {
+      logError('Failed to check admin view mode', tag: 'ClientConfirmationScreen', error: e, stackTrace: stackTrace);
+    }
+  }
+  
+  /// Handle view mode changes from ViewModeService
+  void _onViewModeChanged() {
+    if (mounted) _checkAdminViewMode();
   }
 
   // MARK: - Load Appointment
@@ -111,13 +150,72 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
         automaticallyImplyLeading: false,
       ),
       body: SafeArea(
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _errorMessage != null
-                ? _buildErrorState()
-                : _appointment != null
-                    ? _buildConfirmationContent()
-                    : _buildErrorState(),
+        child: Column(
+          children: [
+            if (_isAdminViewingAsClient) _buildAdminViewBanner(context),
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _errorMessage != null
+                      ? _buildErrorState()
+                      : _appointment != null
+                          ? _buildConfirmationContent()
+                          : _buildErrorState(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  // MARK: - Admin View Banner
+  /// Build banner showing admin is viewing as client with option to go back to admin panel
+  Widget _buildAdminViewBanner(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.sunflowerYellow.withOpacity(0.2),
+        border: Border(
+          bottom: BorderSide(
+            color: AppColors.sunflowerYellow,
+            width: 2,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.admin_panel_settings,
+            color: context.themePrimaryTextColor,
+            size: 20,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Viewing as Client',
+              style: AppTypography.bodyMedium.copyWith(
+                color: context.themePrimaryTextColor,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              logInfo('Admin switching back to admin view', tag: 'ClientConfirmationScreen');
+              _viewModeService.switchToAdminView();
+              context.go(AppConstants.routeAdminDashboard);
+            },
+            child: Text(
+              'Go back to admin panel',
+              style: AppTypography.bodyMedium.copyWith(
+                color: context.themePrimaryTextColor,
+                fontWeight: FontWeight.bold,
+                decoration: TextDecoration.underline,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1020,17 +1118,6 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
         });
       }
     }
-  }
-  
-  @override
-  void dispose() {
-    _postTipAmountController.dispose();
-    _tipCardNumberController.dispose();
-    _tipExpiryMonthController.dispose();
-    _tipExpiryYearController.dispose();
-    _tipCvcController.dispose();
-    _tipCardholderNameController.dispose();
-    super.dispose();
   }
 }
 

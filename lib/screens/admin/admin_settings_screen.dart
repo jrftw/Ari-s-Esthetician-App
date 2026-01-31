@@ -46,6 +46,10 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   bool _paymentsEnabled = false;
   bool _calendarSyncEnabled = false;
   String _calendarSyncProvider = 'google';
+  /// When true, booking requires Health & Skin Disclosure, Required Acknowledgements, Terms & Conditions, and Cancellation & No-Show Policy.
+  bool _requireComplianceForms = true;
+  /// When true, clients can book same day (only future times shown). When false, no booking within 24 hours.
+  bool _allowSameDayBooking = true;
 
   // MARK: - Form Controllers
   final TextEditingController _businessNameController = TextEditingController();
@@ -189,6 +193,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     _paymentsEnabled = settings.paymentsEnabled;
     _calendarSyncEnabled = settings.calendarSyncEnabled;
     _calendarSyncProvider = settings.calendarSyncProvider ?? 'google';
+    _requireComplianceForms = settings.requireComplianceForms;
+    _allowSameDayBooking = settings.allowSameDayBooking;
   }
 
   // MARK: - Save Functionality
@@ -308,6 +314,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           ? null
           : ((double.tryParse(_cancellationFeeController.text.trim()) ?? 0.0) * 100).toInt(),
       paymentsEnabled: _paymentsEnabled,
+      requireComplianceForms: _requireComplianceForms,
+      allowSameDayBooking: _allowSameDayBooking,
       createdAt: _settings?.createdAt ?? now,
       updatedAt: now,
     );
@@ -577,6 +585,100 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
               label: 'Booking Policy Text',
               icon: Icons.event_note,
               maxLines: 3,
+            ),
+            const SizedBox(height: 32),
+
+            // MARK: - Booking Compliance Forms Section
+            _buildSectionHeader(
+              title: 'Booking Compliance Forms',
+              icon: Icons.assignment_turned_in,
+            ),
+            Text(
+              'When enabled, clients must complete Health & Skin Disclosure, Required Acknowledgements, Terms & Conditions, and Cancellation & No-Show Policy before booking. When disabled, none of these sections are shown.',
+              style: AppTypography.bodyMedium.copyWith(
+                color: context.themeSecondaryTextColor,
+              ),
+            ),
+            const SizedBox(height: 16),
+            SwitchListTile(
+              title: Text(
+                'Require Health & Skin Disclosure, Required Acknowledgements, Terms & Conditions, and Cancellation & No-Show Policy',
+                style: AppTypography.bodyLarge.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              subtitle: Text(
+                _requireComplianceForms
+                    ? 'All four compliance sections are shown and required at booking.'
+                    : 'Compliance sections are hidden. Appointments are stored with or without compliance data (backwards compatible).',
+                style: AppTypography.bodySmall.copyWith(
+                  color: context.themeSecondaryTextColor,
+                ),
+              ),
+              value: _requireComplianceForms,
+              onChanged: (value) {
+                setState(() {
+                  _requireComplianceForms = value;
+                  AppLogger().logInfo(
+                    'Require compliance forms: $value',
+                    tag: 'AdminSettingsScreen',
+                  );
+                });
+              },
+              activeColor: AppColors.sunflowerYellow,
+              secondary: Icon(
+                _requireComplianceForms ? Icons.assignment_turned_in : Icons.assignment_outlined,
+                color: _requireComplianceForms
+                    ? Theme.of(context).colorScheme.primary
+                    : context.themeSecondaryTextColor,
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            // MARK: - Same Day Booking Section
+            _buildSectionHeader(
+              title: 'Booking Schedule',
+              icon: Icons.calendar_today,
+            ),
+            Text(
+              'Control whether clients (and admin viewing as client) can book appointments on the same day or must book at least 24 hours in advance.',
+              style: AppTypography.bodyMedium.copyWith(
+                color: context.themeSecondaryTextColor,
+              ),
+            ),
+            const SizedBox(height: 16),
+            SwitchListTile(
+              title: Text(
+                'Allow same-day booking',
+                style: AppTypography.bodyLarge.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              subtitle: Text(
+                _allowSameDayBooking
+                    ? 'Clients can book today. Only times that have not yet passed are shown (e.g. at 4 PM they cannot pick 9 AM).'
+                    : 'Clients cannot book within 24 hours. First bookable slot is at least 24 hours from now.',
+                style: AppTypography.bodySmall.copyWith(
+                  color: context.themeSecondaryTextColor,
+                ),
+              ),
+              value: _allowSameDayBooking,
+              onChanged: (value) {
+                setState(() {
+                  _allowSameDayBooking = value;
+                  AppLogger().logInfo(
+                    'Allow same-day booking: $value',
+                    tag: 'AdminSettingsScreen',
+                  );
+                });
+              },
+              activeColor: AppColors.sunflowerYellow,
+              secondary: Icon(
+                _allowSameDayBooking ? Icons.today : Icons.today_outlined,
+                color: _allowSameDayBooking
+                    ? Theme.of(context).colorScheme.primary
+                    : context.themeSecondaryTextColor,
+              ),
             ),
             const SizedBox(height: 32),
 

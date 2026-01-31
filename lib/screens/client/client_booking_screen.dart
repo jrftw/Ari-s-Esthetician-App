@@ -2,7 +2,7 @@
  * Filename: client_booking_screen.dart
  * Purpose: Complete booking experience with service selection, date/time picker, client form, and payment
  * Author: Kevin Doyle Jr. / Infinitum Imagery LLC
- * Last Modified: 2026-01-30
+ * Last Modified: 2026-01-31
  * Dependencies: Flutter, services, models, table_calendar, flutter_datetime_picker_plus, flutter_stripe, go_router
  * Platform Compatibility: iOS, Android, Web
  */
@@ -24,6 +24,7 @@ import '../../models/service_model.dart';
 import '../../models/service_category_model.dart';
 import '../../models/appointment_model.dart';
 import '../../models/business_settings_model.dart';
+import '../../models/coupon_model.dart';
 import '../../services/firestore_service.dart';
 import '../../services/view_mode_service.dart';
 import '../../services/auth_service.dart';
@@ -91,6 +92,14 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _notesController = TextEditingController();
+  final _couponCodeController = TextEditingController();
+  
+  // MARK: - Coupon State
+  /// Whether any active coupons exist (hide coupon section when false)
+  bool _hasActiveCoupons = false;
+  CouponModel? _appliedCoupon;
+  String? _couponErrorMessage;
+  bool _isValidatingCoupon = false;
   
   // MARK: - Payment Form Controllers
   final _cardNumberController = TextEditingController();
@@ -108,6 +117,25 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
   int _tipAmountCents = 0;
   final TextEditingController _tipAmountController = TextEditingController();
   final List<int> _quickTipOptions = [500, 1000, 1500, 2000, 2500, 5000]; // $5, $10, $15, $20, $25, $50
+  
+  /// Total deposit before coupon (sum of selected services' deposit)
+  int _getTotalDepositCents() {
+    return _selectedServices.fold<int>(
+      0,
+      (sum, s) => sum + s.depositAmountCents,
+    );
+  }
+  
+  /// Discount amount in cents from applied coupon (0 if none)
+  int _getDiscountAmountCents() {
+    if (_appliedCoupon == null) return 0;
+    return _appliedCoupon!.calculateDiscountCents(_getTotalDepositCents());
+  }
+  
+  /// Deposit after discount (for payment and display)
+  int _getDepositAfterDiscountCents() {
+    return (_getTotalDepositCents() - _getDiscountAmountCents()).clamp(0, _getTotalDepositCents());
+  }
   
   /// Initialize payment service when entering payment step
   Future<void> _initializePaymentForStep() async {
@@ -140,6 +168,13 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
   bool _isPregnantOrBreastfeeding = false;
   bool _hasRecentCosmeticTreatments = false;
   bool _hasKnownReactions = false;
+  /// Per-item answer: detail when checked, or "Not applicable" when unchecked (required)
+  final TextEditingController _skinConditionsDetailController = TextEditingController();
+  final TextEditingController _allergiesDetailController = TextEditingController();
+  final TextEditingController _currentMedicationsDetailController = TextEditingController();
+  final TextEditingController _pregnantOrBreastfeedingDetailController = TextEditingController();
+  final TextEditingController _recentCosmeticTreatmentsDetailController = TextEditingController();
+  final TextEditingController _knownReactionsDetailController = TextEditingController();
   final TextEditingController _healthDisclosureNotesController = TextEditingController();
   
   /// Required acknowledgment checkboxes
@@ -173,6 +208,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
         _filterAvailableTimeSlots();
       }
     });
+    _loadHasActiveCoupons();
     _initializePayment();
     
     // Listen to view mode changes
@@ -199,6 +235,21 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
         _businessSettings = null;
         _paymentsEnabled = false;
       });
+    }
+  }
+
+  /// Load whether any active coupons exist (hide coupon section when none)
+  Future<void> _loadHasActiveCoupons() async {
+    try {
+      final hasCoupons = await _firestoreService.hasActiveCoupons();
+      if (mounted) {
+        setState(() => _hasActiveCoupons = hasCoupons);
+      }
+    } catch (e, stackTrace) {
+      logError('Failed to check active coupons', tag: 'ClientBookingScreen', error: e, stackTrace: stackTrace);
+      if (mounted) {
+        setState(() => _hasActiveCoupons = false);
+      }
     }
   }
 
@@ -243,12 +294,19 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
     _emailController.dispose();
     _phoneController.dispose();
     _notesController.dispose();
+    _couponCodeController.dispose();
     _cardNumberController.dispose();
     _expiryMonthController.dispose();
     _expiryYearController.dispose();
     _cvcController.dispose();
     _cardholderNameController.dispose();
     _tipAmountController.dispose();
+    _skinConditionsDetailController.dispose();
+    _allergiesDetailController.dispose();
+    _currentMedicationsDetailController.dispose();
+    _pregnantOrBreastfeedingDetailController.dispose();
+    _recentCosmeticTreatmentsDetailController.dispose();
+    _knownReactionsDetailController.dispose();
     _healthDisclosureNotesController.dispose();
     super.dispose();
   }
@@ -474,7 +532,11 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
       final availableSlots = <TimeOfDay>[];
       
       final now = DateTime.now();
-      final minSlotTime = now.add(const Duration(hours: AppConstants.minBookingAdvanceHours));
+      // When same-day booking is disabled, first bookable slot is 24h from now; otherwise use min advance (e.g. 2h)
+      final allowSameDay = _businessSettings?.allowSameDayBooking ?? true;
+      final minSlotTime = allowSameDay
+          ? now.add(const Duration(hours: AppConstants.minBookingAdvanceHours))
+          : now.add(const Duration(hours: 24));
       
       for (final timeSlot in dayTimeSlots) {
         // Create DateTime for this time slot
@@ -663,6 +725,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
         return;
       }
       setState(() {
+        _errorMessage = null;
         _currentStep = BookingStep.dateTimeSelection;
       });
     } else if (_currentStep == BookingStep.dateTimeSelection) {
@@ -678,9 +741,17 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
         _selectedTime!.minute,
       );
       
-      // Validate selected time is in the future
-      if (_selectedDateTime!.isBefore(DateTime.now().add(const Duration(hours: AppConstants.minBookingAdvanceHours)))) {
-        _showError('Please select a time at least ${AppConstants.minBookingAdvanceHours} hours in advance');
+      // Validate selected time meets advance requirement (same-day: min advance hours; no same-day: 24h)
+      final allowSameDay = _businessSettings?.allowSameDayBooking ?? true;
+      final minAdvance = allowSameDay
+          ? const Duration(hours: AppConstants.minBookingAdvanceHours)
+          : const Duration(hours: 24);
+      if (_selectedDateTime!.isBefore(DateTime.now().add(minAdvance))) {
+        if (allowSameDay) {
+          _showError('Please select a time at least ${AppConstants.minBookingAdvanceHours} hours in advance');
+        } else {
+          _showError('Bookings must be at least 24 hours in advance. Please select another date or time.');
+        }
         return;
       }
       
@@ -704,6 +775,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
       }
       
       setState(() {
+        _errorMessage = null;
         _currentStep = BookingStep.clientInformation;
       });
     } else if (_currentStep == BookingStep.clientInformation) {
@@ -711,28 +783,55 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
         return;
       }
       
-      // Validate all required legal compliance acceptances
-      if (!_termsAccepted) {
-        _showError('You must accept the Terms & Conditions to proceed');
-        return;
-      }
-      
-      if (!_understandsResultsNotGuaranteed ||
-          !_understandsServicesNonMedical ||
-          !_agreesToFollowAftercare ||
-          !_acceptsInherentRisks) {
-        _showError('You must accept all required acknowledgments to proceed');
-        return;
-      }
-      
-      if (!_cancellationPolicyAcknowledged) {
-        _showError('You must acknowledge the cancellation policy to proceed');
-        return;
+      // Validate compliance forms only when business setting requires them
+      if (_businessSettings?.requireComplianceForms != false) {
+        // Validate Health & Skin Disclosure: each item must be checked OR have "Not applicable"
+        final healthNotApplicable = _isHealthDisclosureItemNotApplicable;
+        if (!_hasSkinConditions && !healthNotApplicable(_skinConditionsDetailController.text)) {
+          _showError('Health & Skin Disclosure: For "Skin conditions", either check the box or type "Not applicable" below.');
+          return;
+        }
+        if (!_hasAllergies && !healthNotApplicable(_allergiesDetailController.text)) {
+          _showError('Health & Skin Disclosure: For "Allergies", either check the box or type "Not applicable" below.');
+          return;
+        }
+        if (!_hasCurrentMedications && !healthNotApplicable(_currentMedicationsDetailController.text)) {
+          _showError('Health & Skin Disclosure: For "Current medications", either check the box or type "Not applicable" below.');
+          return;
+        }
+        if (!_isPregnantOrBreastfeeding && !healthNotApplicable(_pregnantOrBreastfeedingDetailController.text)) {
+          _showError('Health & Skin Disclosure: For "Pregnancy or breastfeeding", either check the box or type "Not applicable" below.');
+          return;
+        }
+        if (!_hasRecentCosmeticTreatments && !healthNotApplicable(_recentCosmeticTreatmentsDetailController.text)) {
+          _showError('Health & Skin Disclosure: For "Recent cosmetic treatments", either check the box or type "Not applicable" below.');
+          return;
+        }
+        if (!_hasKnownReactions && !healthNotApplicable(_knownReactionsDetailController.text)) {
+          _showError('Health & Skin Disclosure: For "Known reactions to skincare products", either check the box or type "Not applicable" below.');
+          return;
+        }
+        if (!_termsAccepted) {
+          _showError('You must accept the Terms & Conditions to proceed');
+          return;
+        }
+        if (!_understandsResultsNotGuaranteed ||
+            !_understandsServicesNonMedical ||
+            !_agreesToFollowAftercare ||
+            !_acceptsInherentRisks) {
+          _showError('You must accept all required acknowledgments to proceed');
+          return;
+        }
+        if (!_cancellationPolicyAcknowledged) {
+          _showError('You must check "I understand and agree to the cancellation and no-show policy" to proceed');
+          return;
+        }
       }
       
       // If payments are enabled, go to payment step
       if (_paymentsEnabled) {
         setState(() {
+          _errorMessage = null;
           _currentStep = BookingStep.payment;
         });
         // Initialize payment and create payment intent when entering payment step
@@ -749,20 +848,29 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
   void _previousStep() {
     if (_currentStep == BookingStep.dateTimeSelection) {
       setState(() {
+        _errorMessage = null;
         _currentStep = BookingStep.serviceSelection;
       });
     } else if (_currentStep == BookingStep.clientInformation) {
       setState(() {
+        _errorMessage = null;
         _currentStep = BookingStep.dateTimeSelection;
       });
     } else if (_currentStep == BookingStep.payment) {
       setState(() {
+        _errorMessage = null;
         _currentStep = BookingStep.clientInformation;
       });
     }
   }
   
   // MARK: - Error Handling
+  /// Returns true if the text indicates "Not applicable" (required when checkbox unchecked)
+  bool _isHealthDisclosureItemNotApplicable(String text) {
+    final t = text.trim().toLowerCase();
+    return t == 'not applicable' || t == 'n/a' || t == 'na';
+  }
+
   /// Show error message
   void _showError(String message) {
     setState(() {
@@ -792,13 +900,8 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
         _errorMessage = null;
       });
       
-      // Calculate total deposit
-      final totalDepositCents = _selectedServices.fold<int>(
-        0,
-        (sum, service) => sum + service.depositAmountCents,
-      );
-      
-      // Calculate total amount (deposit + tip)
+      // Calculate total amount (deposit after discount + tip)
+      final totalDepositCents = _getDepositAfterDiscountCents();
       final totalAmountCents = totalDepositCents + _tipAmountCents;
       
       // Create payment intent for deposit + tip
@@ -811,6 +914,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
           'serviceCount': _selectedServices.length.toString(),
           'depositAmount': totalDepositCents.toString(),
           'tipAmount': _tipAmountCents.toString(),
+          if (_appliedCoupon != null) 'couponCode': _appliedCoupon!.code,
         },
       );
       
@@ -949,48 +1053,76 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
     try {
       logLoading('Submitting booking...', tag: 'ClientBookingScreen');
       
-      // Capture device metadata for legal compliance
+      // Capture device metadata and compliance data only when business requires compliance forms
+      final requireCompliance = _businessSettings?.requireComplianceForms != false;
       final deviceMetadata = await DeviceMetadataService.getDeviceMetadata();
       final nowUtc = DateTime.now().toUtc();
       final nowLocal = DateTime.now();
       
-      // Create Terms Acceptance Metadata
-      final termsAcceptanceMetadata = TermsAcceptanceMetadata(
-        termsAccepted: _termsAccepted,
-        termsAcceptedAtUtc: nowUtc,
-        termsAcceptedAtLocal: nowLocal,
-        ipAddress: deviceMetadata['ipAddress'],
-        userAgent: deviceMetadata['userAgent'],
-        platform: deviceMetadata['platform'],
-        osVersion: deviceMetadata['osVersion'],
-      );
+      TermsAcceptanceMetadata? termsAcceptanceMetadata;
+      HealthDisclosure? healthDisclosure;
+      RequiredAcknowledgments? requiredAcknowledgments;
+      Map<String, String>? healthDisclosureDetails;
+      DateTime? requiredAcknowledgmentsAcceptedAt;
+      CancellationPolicySnapshot? cancellationPolicySnapshot;
+      bool cancellationPolicyAcknowledged = false;
       
-      // Create Health Disclosure
-      final healthDisclosure = HealthDisclosure(
-        hasSkinConditions: _hasSkinConditions,
-        hasAllergies: _hasAllergies,
-        hasCurrentMedications: _hasCurrentMedications,
-        isPregnantOrBreastfeeding: _isPregnantOrBreastfeeding,
-        hasRecentCosmeticTreatments: _hasRecentCosmeticTreatments,
-        hasKnownReactions: _hasKnownReactions,
-        additionalNotes: _healthDisclosureNotesController.text.trim().isEmpty
-            ? null
-            : _healthDisclosureNotesController.text.trim(),
-      );
+      if (requireCompliance) {
+        termsAcceptanceMetadata = TermsAcceptanceMetadata(
+          termsAccepted: _termsAccepted,
+          termsAcceptedAtUtc: nowUtc,
+          termsAcceptedAtLocal: nowLocal,
+          ipAddress: deviceMetadata['ipAddress'],
+          userAgent: deviceMetadata['userAgent'],
+          platform: deviceMetadata['platform'],
+          osVersion: deviceMetadata['osVersion'],
+        );
+        healthDisclosure = HealthDisclosure(
+          hasSkinConditions: _hasSkinConditions,
+          hasAllergies: _hasAllergies,
+          hasCurrentMedications: _hasCurrentMedications,
+          isPregnantOrBreastfeeding: _isPregnantOrBreastfeeding,
+          hasRecentCosmeticTreatments: _hasRecentCosmeticTreatments,
+          hasKnownReactions: _hasKnownReactions,
+          additionalNotes: _healthDisclosureNotesController.text.trim().isEmpty
+              ? null
+              : _healthDisclosureNotesController.text.trim(),
+        );
+        requiredAcknowledgments = RequiredAcknowledgments(
+          understandsResultsNotGuaranteed: _understandsResultsNotGuaranteed,
+          understandsServicesNonMedical: _understandsServicesNonMedical,
+          agreesToFollowAftercare: _agreesToFollowAftercare,
+          acceptsInherentRisks: _acceptsInherentRisks,
+        );
+        String detailOrNotApplicable(TextEditingController c, bool checked) {
+          final t = c.text.trim();
+          if (checked) return t.isEmpty ? 'Yes' : t;
+          return t.isEmpty ? 'Not applicable' : t;
+        }
+        healthDisclosureDetails = <String, String>{
+          'skinConditions': detailOrNotApplicable(_skinConditionsDetailController, _hasSkinConditions),
+          'allergies': detailOrNotApplicable(_allergiesDetailController, _hasAllergies),
+          'currentMedications': detailOrNotApplicable(_currentMedicationsDetailController, _hasCurrentMedications),
+          'pregnantOrBreastfeeding': detailOrNotApplicable(_pregnantOrBreastfeedingDetailController, _isPregnantOrBreastfeeding),
+          'recentCosmeticTreatments': detailOrNotApplicable(_recentCosmeticTreatmentsDetailController, _hasRecentCosmeticTreatments),
+          'knownReactions': detailOrNotApplicable(_knownReactionsDetailController, _hasKnownReactions),
+        };
+        if (_healthDisclosureNotesController.text.trim().isNotEmpty) {
+          healthDisclosureDetails['additionalNotes'] = _healthDisclosureNotesController.text.trim();
+        }
+        requiredAcknowledgmentsAcceptedAt = nowUtc;
+        cancellationPolicySnapshot = CancellationPolicySnapshot(
+          acknowledged: _cancellationPolicyAcknowledged,
+          acknowledgedAt: nowUtc,
+          policyVersion: TermsAndConditions.cancellationPolicyVersion,
+          policyTextHash: null,
+        );
+        cancellationPolicyAcknowledged = _cancellationPolicyAcknowledged;
+      }
       
-      // Create Required Acknowledgments
-      final requiredAcknowledgments = RequiredAcknowledgments(
-        understandsResultsNotGuaranteed: _understandsResultsNotGuaranteed,
-        understandsServicesNonMedical: _understandsServicesNonMedical,
-        agreesToFollowAftercare: _agreesToFollowAftercare,
-        acceptsInherentRisks: _acceptsInherentRisks,
-      );
-      
-      // Calculate total deposit for all services
-      final totalDepositCents = _selectedServices.fold<int>(
-        0,
-        (sum, service) => sum + service.depositAmountCents,
-      );
+      // Total discount for this booking (same value stored on each appointment)
+      final bookingDiscountCents = _getDiscountAmountCents();
+      final bookingCouponCode = _appliedCoupon?.code;
       
       // Create appointments for each selected service
       // Services will be scheduled sequentially (one after another)
@@ -1024,7 +1156,12 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
           termsAcceptanceMetadata: termsAcceptanceMetadata,
           healthDisclosure: healthDisclosure,
           requiredAcknowledgments: requiredAcknowledgments,
-          cancellationPolicyAcknowledged: _cancellationPolicyAcknowledged,
+          cancellationPolicyAcknowledged: cancellationPolicyAcknowledged,
+          healthDisclosureDetails: healthDisclosureDetails,
+          requiredAcknowledgmentsAcceptedAt: requiredAcknowledgmentsAcceptedAt,
+          cancellationPolicySnapshot: cancellationPolicySnapshot,
+          couponCode: bookingCouponCode,
+          discountAmountCents: bookingDiscountCents,
         );
         
         // Create appointment in Firestore
@@ -1044,6 +1181,16 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
       }
       
       logSuccess('Booking submitted successfully: ${appointmentIds.length} appointment(s) created', tag: 'ClientBookingScreen');
+      
+      // Increment coupon usage after successful booking
+      if (_appliedCoupon != null) {
+        try {
+          await _firestoreService.incrementCouponUsage(_appliedCoupon!.id);
+        } catch (e, stackTrace) {
+          logError('Failed to increment coupon usage', tag: 'ClientBookingScreen', error: e, stackTrace: stackTrace);
+          // Don't fail the booking if increment fails
+        }
+      }
       
       // Send confirmation email for the first appointment
       if (appointmentIds.isNotEmpty) {
@@ -1302,7 +1449,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
               context.go(AppConstants.routeAdminDashboard);
             },
             child: Text(
-              'Back to Admin',
+              'Go back to admin panel',
               style: AppTypography.bodyMedium.copyWith(
                 color: context.themePrimaryTextColor,
                 fontWeight: FontWeight.bold,
@@ -1903,11 +2050,22 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
               ),
             ),
             enabledDayPredicate: (day) {
-              // Disable past dates and dates too far in advance
+              // Disable past dates and dates too far in advance. When same-day disabled, first selectable day is 24h from now.
               final now = DateTime.now();
-              final minDate = now.add(const Duration(hours: AppConstants.minBookingAdvanceHours));
-              return day.isAfter(minDate.subtract(const Duration(days: 1))) &&
-                  day.isBefore(_lastDay.add(const Duration(days: 1)));
+              final allowSameDay = _businessSettings?.allowSameDayBooking ?? true;
+              final DateTime minSelectableDate;
+              if (allowSameDay) {
+                final minDate = now.add(const Duration(hours: AppConstants.minBookingAdvanceHours));
+                minSelectableDate = minDate.subtract(const Duration(days: 1));
+                // Allow day > minDate - 1 day (i.e. today and future when today has slots 2h+ from now)
+                return day.isAfter(minSelectableDate) &&
+                    day.isBefore(_lastDay.add(const Duration(days: 1)));
+              } else {
+                final nowPlus24 = now.add(const Duration(hours: 24));
+                minSelectableDate = DateTime(nowPlus24.year, nowPlus24.month, nowPlus24.day).subtract(const Duration(days: 1));
+                return day.isAfter(minSelectableDate) &&
+                    day.isBefore(_lastDay.add(const Duration(days: 1)));
+              }
             },
           ),
         ),
@@ -2123,23 +2281,159 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
             ),
             maxLength: AppConstants.maxNotesLength,
           ),
-          const SizedBox(height: 32),
-          
-          // MARK: - Health Disclosure Section
-          _buildHealthDisclosureSection(),
-          const SizedBox(height: 32),
-          
-          // MARK: - Required Acknowledgments Section
-          _buildRequiredAcknowledgmentsSection(),
-          const SizedBox(height: 32),
-          
-          // MARK: - Terms & Conditions Section
-          _buildTermsAndConditionsSection(),
-          const SizedBox(height: 32),
-          
-          // MARK: - Cancellation Policy Acknowledgment
-          _buildCancellationPolicySection(),
           const SizedBox(height: 24),
+          
+          // MARK: - Coupon Section (only when admin has created at least one active coupon)
+          if (_hasActiveCoupons) ...[
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.sunflowerYellow.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+              border: Border.all(color: AppColors.sunflowerYellow.withOpacity(0.25)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Coupon Code',
+                  style: AppTypography.titleSmall.copyWith(
+                    color: context.themePrimaryTextColor,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _couponCodeController,
+                        decoration: InputDecoration(
+                          hintText: 'Enter code',
+                          prefixIcon: const Icon(Icons.local_offer_outlined),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+                          ),
+                          errorText: _couponErrorMessage,
+                        ),
+                        textCapitalization: TextCapitalization.characters,
+                        onChanged: (_) {
+                          if (_couponErrorMessage != null) {
+                            setState(() => _couponErrorMessage = null);
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    if (_appliedCoupon == null)
+                      SizedBox(
+                        height: 56,
+                        child: ElevatedButton(
+                          onPressed: _isValidatingCoupon
+                              ? null
+                              : () async {
+                                  final code = _couponCodeController.text.trim();
+                                  if (code.isEmpty) {
+                                    setState(() => _couponErrorMessage = 'Enter a coupon code');
+                                    return;
+                                  }
+                                  setState(() {
+                                    _couponErrorMessage = null;
+                                    _isValidatingCoupon = true;
+                                  });
+                                  try {
+                                    final coupon = await _firestoreService.validateCoupon(code);
+                                    if (mounted) {
+                                      setState(() {
+                                        _appliedCoupon = coupon;
+                                        _isValidatingCoupon = false;
+                                        _paymentIntent = null;
+                                      });
+                                    }
+                                  } catch (e) {
+                                    if (mounted) {
+                                      setState(() {
+                                        _couponErrorMessage = e is Exception ? e.toString().replaceFirst('Exception: ', '') : 'Invalid coupon';
+                                        _isValidatingCoupon = false;
+                                      });
+                                    }
+                                  }
+                                },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.sunflowerYellow,
+                            foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                          ),
+                          child: _isValidatingCoupon
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Text('Apply'),
+                        ),
+                      )
+                    else
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: AppColors.sunflowerYellow.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              _appliedCoupon!.code,
+                              style: AppTypography.bodyMedium.copyWith(
+                                color: context.themePrimaryTextColor,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _appliedCoupon = null;
+                                _couponCodeController.clear();
+                                _couponErrorMessage = null;
+                                _paymentIntent = null;
+                              });
+                            },
+                            child: Text('Remove', style: TextStyle(color: AppColors.errorRed)),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+                if (_appliedCoupon != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    '${_appliedCoupon!.discountDescription} applied',
+                    style: AppTypography.bodySmall.copyWith(
+                      color: AppColors.sunflowerYellow,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 32),
+          ],
+          
+          // MARK: - Compliance Forms (only when business setting requires them)
+          if (_businessSettings?.requireComplianceForms != false) ...[
+            _buildHealthDisclosureSection(),
+            const SizedBox(height: 32),
+            _buildRequiredAcknowledgmentsSection(),
+            const SizedBox(height: 32),
+            _buildTermsAndConditionsSection(),
+            const SizedBox(height: 32),
+            _buildCancellationPolicySection(),
+            const SizedBox(height: 24),
+          ],
           
           // Booking Summary
           Container(
@@ -2199,9 +2493,14 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                 const Divider(),
                 if (_paymentsEnabled) ...[
                   _buildSummaryRow(
-                    'Deposit Required',
-                    '\$${(_selectedServices.fold<int>(0, (sum, s) => sum + s.depositAmountCents) / 100).toStringAsFixed(2)}',
+                    'Deposit',
+                    '\$${(_getTotalDepositCents() / 100).toStringAsFixed(2)}',
                   ),
+                  if (_getDiscountAmountCents() > 0)
+                    _buildSummaryRow(
+                      'Discount',
+                      '-\$${(_getDiscountAmountCents() / 100).toStringAsFixed(2)}',
+                    ),
                   if (_tipAmountCents > 0)
                     _buildSummaryRow(
                       'Tip',
@@ -2209,15 +2508,20 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                     ),
                   _buildSummaryRow(
                     'Total Amount',
-                    '\$${((_selectedServices.fold<int>(0, (sum, s) => sum + s.depositAmountCents) + _tipAmountCents) / 100).toStringAsFixed(2)}',
+                    '\$${((_getDepositAfterDiscountCents() + _tipAmountCents) / 100).toStringAsFixed(2)}',
                     isBold: true,
                   ),
                 ] else ...[
-                  // Show pricing but indicate payment not required
+                  // Show actual service price when payment not required
                   _buildSummaryRow(
                     'Service Price',
-                    '\$${(_selectedServices.fold<int>(0, (sum, s) => sum + s.depositAmountCents) / 100).toStringAsFixed(2)}',
+                    '\$${(_selectedServices.fold<int>(0, (sum, s) => sum + s.priceCents) / 100).toStringAsFixed(2)}',
                   ),
+                  if (_getDiscountAmountCents() > 0)
+                    _buildSummaryRow(
+                      'Discount',
+                      '-\$${(_getDiscountAmountCents() / 100).toStringAsFixed(2)}',
+                    ),
                   Container(
                     padding: const EdgeInsets.all(12),
                     margin: const EdgeInsets.only(top: 8),
@@ -2302,7 +2606,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Health & Skin Disclosure',
+            'Health & Skin Disclosure (required)',
             style: AppTypography.titleLarge.copyWith(
               color: context.themePrimaryTextColor,
               fontWeight: FontWeight.bold,
@@ -2310,7 +2614,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Please disclose any relevant health information to ensure safe treatment',
+            'For each item: check the box if it applies to you, or type "Not applicable" in the field below.',
             style: AppTypography.bodySmall.copyWith(
               color: context.themeSecondaryTextColor,
             ),
@@ -2321,36 +2625,42 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
             _hasSkinConditions,
             (value) => setState(() => _hasSkinConditions = value ?? false),
           ),
+          _buildHealthDisclosureDetailField(_skinConditionsDetailController, _hasSkinConditions),
           const SizedBox(height: 12),
           _buildHealthCheckbox(
             'Allergies or sensitivities',
             _hasAllergies,
             (value) => setState(() => _hasAllergies = value ?? false),
           ),
+          _buildHealthDisclosureDetailField(_allergiesDetailController, _hasAllergies),
           const SizedBox(height: 12),
           _buildHealthCheckbox(
             'Current medications (topical or oral)',
             _hasCurrentMedications,
             (value) => setState(() => _hasCurrentMedications = value ?? false),
           ),
+          _buildHealthDisclosureDetailField(_currentMedicationsDetailController, _hasCurrentMedications),
           const SizedBox(height: 12),
           _buildHealthCheckbox(
             'Pregnancy or breastfeeding',
             _isPregnantOrBreastfeeding,
             (value) => setState(() => _isPregnantOrBreastfeeding = value ?? false),
           ),
+          _buildHealthDisclosureDetailField(_pregnantOrBreastfeedingDetailController, _isPregnantOrBreastfeeding),
           const SizedBox(height: 12),
           _buildHealthCheckbox(
             'Recent cosmetic treatments (peels, injectables, laser)',
             _hasRecentCosmeticTreatments,
             (value) => setState(() => _hasRecentCosmeticTreatments = value ?? false),
           ),
+          _buildHealthDisclosureDetailField(_recentCosmeticTreatmentsDetailController, _hasRecentCosmeticTreatments),
           const SizedBox(height: 12),
           _buildHealthCheckbox(
             'Known reactions to skincare products',
             _hasKnownReactions,
             (value) => setState(() => _hasKnownReactions = value ?? false),
           ),
+          _buildHealthDisclosureDetailField(_knownReactionsDetailController, _hasKnownReactions),
           const SizedBox(height: 16),
           TextFormField(
             controller: _healthDisclosureNotesController,
@@ -2385,6 +2695,29 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
       contentPadding: EdgeInsets.zero,
     );
   }
+
+  /// Build required detail field: when unchecked user must type "Not applicable"; when checked optional details
+  Widget _buildHealthDisclosureDetailField(TextEditingController controller, bool isChecked) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 16, top: 4, bottom: 4),
+      child: TextFormField(
+        controller: controller,
+        decoration: InputDecoration(
+          hintText: isChecked ? 'Optional: add details' : "Required: type 'Not applicable' if this does not apply",
+          hintStyle: TextStyle(
+            fontSize: 12,
+            color: isChecked ? context.themeSecondaryTextColor : AppColors.errorRed.withOpacity(0.8),
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+          ),
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        ),
+        maxLength: 200,
+      ),
+    );
+  }
   
   // MARK: - Required Acknowledgments Section
   /// Build required acknowledgments section
@@ -2407,7 +2740,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Required Acknowledgments',
+            'Required Acknowledgments (required)',
             style: AppTypography.titleLarge.copyWith(
               color: context.themePrimaryTextColor,
               fontWeight: FontWeight.bold,
@@ -2415,7 +2748,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'All acknowledgments must be accepted to proceed',
+            'You must check all four acknowledgments below to proceed.',
             style: AppTypography.bodySmall.copyWith(
               color: context.themeSecondaryTextColor,
             ),
@@ -2670,31 +3003,44 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
           ),
         ],
       ),
-      child: CheckboxListTile(
-        title: Text(
-          'I understand and agree to the cancellation and no-show policy',
-          style: AppTypography.bodyMedium.copyWith(
-            color: context.themePrimaryTextColor,
-            fontWeight: FontWeight.w500,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Cancellation & No-Show Policy (required)',
+            style: AppTypography.titleSmall.copyWith(
+              color: context.themePrimaryTextColor,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Text(
-            'Cancellations must be made at least 24 hours in advance. No-shows may result in forfeiture of deposit.',
-            style: AppTypography.bodySmall,
+          const SizedBox(height: 8),
+          CheckboxListTile(
+            title: Text(
+              'I understand and agree to the cancellation and no-show policy',
+              style: AppTypography.bodyMedium.copyWith(
+                color: context.themePrimaryTextColor,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'Cancellations must be made at least 24 hours in advance. No-shows may result in forfeiture of deposit.',
+                style: AppTypography.bodySmall,
+              ),
+            ),
+            value: _cancellationPolicyAcknowledged,
+            onChanged: (value) {
+              setState(() {
+                _cancellationPolicyAcknowledged = value ?? false;
+              });
+            },
+            activeColor: AppColors.sunflowerYellow,
+            checkColor: Theme.of(context).colorScheme.onPrimary,
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
           ),
-        ),
-        value: _cancellationPolicyAcknowledged,
-        onChanged: (value) {
-          setState(() {
-            _cancellationPolicyAcknowledged = value ?? false;
-          });
-        },
-        activeColor: AppColors.sunflowerYellow,
-        checkColor: Theme.of(context).colorScheme.onPrimary,
-        contentPadding: EdgeInsets.zero,
-        controlAffinity: ListTileControlAffinity.leading,
+        ],
       ),
     );
   }
@@ -2772,11 +3118,8 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
       );
     }
     
-    // Calculate total deposit
-    final totalDepositCents = _selectedServices.fold<int>(
-      0,
-      (sum, service) => sum + service.depositAmountCents,
-    );
+    // Total deposit after coupon discount
+    final totalDepositCents = _getDepositAfterDiscountCents();
     final totalDeposit = _paymentService.formatAmount(totalDepositCents, AppConstants.stripeCurrency);
     
     return Form(
@@ -2817,7 +3160,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Deposit Required',
+                      _getDiscountAmountCents() > 0 ? 'Deposit (after discount)' : 'Deposit Required',
                       style: AppTypography.bodyMedium.copyWith(
                         color: context.themeSecondaryTextColor,
                       ),
@@ -2830,6 +3173,27 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                     ),
                   ],
                 ),
+                if (_getDiscountAmountCents() > 0) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Coupon (${_appliedCoupon?.code ?? ''})',
+                        style: AppTypography.bodySmall.copyWith(
+                          color: context.themeSecondaryTextColor,
+                        ),
+                      ),
+                      Text(
+                        '-\$${(_getDiscountAmountCents() / 100).toStringAsFixed(2)}',
+                        style: AppTypography.bodySmall.copyWith(
+                          color: AppColors.sunflowerYellow,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 if (_tipAmountCents > 0) ...[
                   const SizedBox(height: 8),
                   Row(

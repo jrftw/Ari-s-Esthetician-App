@@ -58,19 +58,24 @@ service cloud.firestore {
       // App only uses appointment times for overlap; no other client PII is shown.
       allow read: if true;
       
-      // Only admin can update/delete appointments
-      allow update, delete: if isAdmin();
+      // Admin can update/delete; user can update own appointments (by clientEmail) for account linking (userId)
+      allow update: if isAdmin() ||
+        (isAuthenticated() && resource.data.clientEmail == request.auth.token.email);
+      allow delete: if isAdmin();
     }
     
     // MARK: - Clients Collection
-    /// Clients - admin read/write, clients can read their own record
+    /// Clients - admin read/write, clients can read their own record; clients can update own (by email) for account linking
     match /clients/{clientId} {
       // Allow clients to read their own client record (matched by email)
       allow read: if isAdmin() || 
         (isAuthenticated() && 
          resource.data.email == request.auth.token.email);
-      // Only admin can write
-      allow write: if isAdmin();
+      // Admin can write; user can update own client (by email) for account linking (userId)
+      allow create: if isAdmin();
+      allow update: if isAdmin() ||
+        (isAuthenticated() && resource.data.email == request.auth.token.email);
+      allow delete: if isAdmin();
     }
     
     // MARK: - Business Settings Collection
@@ -133,6 +138,16 @@ service cloud.firestore {
     /// Admin and super admin can manage time-off periods
     match /time_off/{timeOffId} {
       // Public read for booking availability (guests are unauthenticated)
+      allow read: if true;
+      // Only admin and super admin can create, update, and delete
+      allow create, update, delete: if isAdmin();
+    }
+    
+    // MARK: - Coupons Collection
+    /// Coupons - public read so clients can validate codes at booking
+    /// Admin and super admin can create, update, and delete coupons
+    match /coupons/{couponId} {
+      // Public read so guests can apply and validate coupon codes
       allow read: if true;
       // Only admin and super admin can create, update, and delete
       allow create, update, delete: if isAdmin();

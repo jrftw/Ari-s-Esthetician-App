@@ -221,6 +221,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           
           _buildNavCard(
             context,
+            title: 'Coupons',
+            subtitle: 'Manage coupon codes for client bookings',
+            icon: Icons.local_offer,
+            route: AppConstants.routeAdminCoupons,
+          ),
+          
+          _buildNavCard(
+            context,
             title: 'Settings',
             subtitle: 'Business settings and branding',
             icon: Icons.settings,

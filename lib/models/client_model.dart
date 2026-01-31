@@ -82,6 +82,9 @@ class ClientModel extends Equatable {
   @JsonKey(fromJson: _timestampFromJson, toJson: _timestampToJson)
   final DateTime? lastAppointmentAt;
 
+  /// Optional user ID when client is linked to an account (for account linking)
+  final String? userId;
+
   // MARK: - Constructor
   const ClientModel({
     required this.id,
@@ -98,6 +101,7 @@ class ClientModel extends Equatable {
     required this.createdAt,
     required this.updatedAt,
     this.lastAppointmentAt,
+    this.userId,
   });
 
   // MARK: - Factory Constructors
@@ -121,6 +125,7 @@ class ClientModel extends Equatable {
     required String email,
     required String phone,
     List<ClientTag> tags = const [],
+    String? userId,
   }) {
     final now = DateTime.now();
     return ClientModel(
@@ -136,6 +141,7 @@ class ClientModel extends Equatable {
       totalSpentCents: 0,
       createdAt: now,
       updatedAt: now,
+      userId: userId,
     );
   }
 
@@ -199,6 +205,7 @@ class ClientModel extends Equatable {
     DateTime? createdAt,
     DateTime? updatedAt,
     DateTime? lastAppointmentAt,
+    String? userId,
   }) {
     return ClientModel(
       id: id ?? this.id,
@@ -215,6 +222,7 @@ class ClientModel extends Equatable {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
       lastAppointmentAt: lastAppointmentAt ?? this.lastAppointmentAt,
+      userId: userId ?? this.userId,
     );
   }
 
@@ -235,6 +243,7 @@ class ClientModel extends Equatable {
         createdAt,
         updatedAt,
         lastAppointmentAt,
+        userId,
       ];
 
   // MARK: - Timestamp Helpers

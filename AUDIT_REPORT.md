@@ -1,318 +1,146 @@
-# Ari Esthetician App — Full Application Audit (Current State)
+# Ari Esthetician App — Requirements Audit Report
 
-**Audit Date:** January 30, 2026  
-**Last Updated:** January 30, 2026  
+**Audit Date:** January 31, 2026  
 **Author:** Kevin Doyle Jr. / Infinitum Imagery LLC  
-**Scope:** Entire Flutter/Firebase codebase, Firestore rules, indexes, Firebase config, and analyzer.
+**Scope:** Guest checkout directory sync, Health & Skin Disclosure, Required Acknowledgements, Cancellation policy, Account linking, Admin PDF preview/print. Backwards compatibility and non-breaking changes.
 
 ---
 
 ## Executive Summary
 
-The app is **structurally sound** and **fully functional** for core flows. Previous critical and minor issues have been fixed: guest booking (time_off rules), analyzer warnings (firebase_config, duplicate import), Firestore index file (composite indexes added, single-field clients/email removed to avoid 400), and Firebase CLI setup (firebase.json + .firebaserc). This audit adds: **feature inventory**, **risk list**, **Firebase free-tier risk points**, **performance hotspots**, and **fix plan** for correctness/stability, performance, and free-tier compliance. Several **stream subscription leaks** and one **router/auth notifier leak** were identified; fixes are minimal and localized.
+The app has **existing support** for client info (first/last/email/phone), directory sync (clients collection), appointment creation with legal compliance fields (terms, health disclosure, required acknowledgements, cancellation policy), and client appointments by email. **Gaps** vs. the stated requirements: (1) Guest directory sync is best-effort (errors caught, booking still succeeds); (2) Health disclosure is boolean-only—no “full answers” or “Not applicable” text; (3) Required acknowledgements and cancellation policy lack timestamps/version on the appointment record; (4) No explicit account linking (userId) on appointments/clients—history is email-based only; (5) Admin has no appointment-level preview/print PDF. This document details current data flows, gaps, risks, and backwards-compat concerns.
 
 ---
 
-## A. Feature Inventory & Mapping
+## A. Current Data Flows
 
-### A.1 Features / Modules / Screens
+### A.1 Guest Flow
 
-| Area | Screens / Modules | Purpose |
-|------|------------------|---------|
-| **Bootstrap** | main.dart, firebase_config.dart | Entry, Firebase init, version check, theme prefs, router. |
-| **Routing** | app_router.dart | GoRouter with ShellRoute (AuraScreenWrapper). Routes: splash, welcome, account-choice, login, signup, booking, confirmation, appointments, settings; admin: dashboard, services, appointments, clients, settings, categories, earnings, notifications, software-enhancements, time-off. |
-| **Auth** | login_screen, signup_screen | Login/signup, remember me, keep signed in, saved email/password, admin vs client redirect. |
-| **Welcome / Onboarding** | splash_screen, welcome_screen, account_choice_screen, update_required_screen | Splash (2s + auth), welcome, account choice (login/signup/guest), update gate. |
-| **Client** | client_booking_screen, client_confirmation_screen, client_appointments_screen | Booking (service → date/time → client info → payment → confirmation), confirmation, my appointments (tabs: upcoming / past). |
-| **Admin** | admin_dashboard_screen, admin_services_screen, admin_appointments_screen, admin_clients_screen, admin_settings_screen, admin_category_management_screen, admin_earnings_screen, admin_notifications_screen, admin_software_enhancements_screen, admin_time_off_screen | Dashboard (unread count), services/categories CRUD, appointments (list/calendar, filters, create/edit), clients CRUD/search, business settings, earnings, notifications (read/archive), software enhancements (superAdmin), time-off CRUD. |
-| **Settings** | settings_screen | Theme (light only), aura (on/off, intensity, color), changelog, logout. |
-| **Services** | auth_service, firestore_service, preferences_service, version_check_service, notification_service, view_mode_service, payment_service, email_service, device_metadata_service, app_diagnostics_service | Auth, Firestore CRUD + streams, SharedPreferences (theme/aura/login), version check (Firestore doc), notifications, view mode (admin-as-client), Stripe, email, diagnostics. |
+| Step | Current Behavior |
+|------|------------------|
+| Entry | Welcome → Account Choice → “Continue as Guest” → `context.go('/booking')`. No auth; no userId. |
+| Booking | ClientBookingScreen: service → date/time → client info (first, last, email, phone, notes) → Health & Skin Disclosure (checkboxes + optional notes) → Required Acknowledgements (4 checkboxes) → Terms & Conditions (checkbox) → Cancellation policy (checkbox) → Payment (if enabled) → Submit. |
+| Submit | `_submitBooking()` builds AppointmentModel with client fields + termsAcceptanceMetadata, healthDisclosure, requiredAcknowledgments, cancellationPolicyAcknowledged; calls `_firestoreService.createAppointment(appointment)` for each service. |
+| After create | `createAppointment` writes appointment to Firestore, then calls `_syncClientFromAppointment(appointment)`. Sync errors are **caught and logged**; appointment creation still succeeds (best-effort). |
+| Confirmation | Navigate to `/confirmation/{appointmentId}`. Guest has no “My Appointments” (requires login). |
 
-### A.2 State Management, Routing, Persistence, Firebase
+**Gap:** Directory sync is not mandatory; guest data can fail to persist to clients collection without failing the booking.
 
-- **State:** Widget-local `setState` + services (AuthService, FirestoreService, PreferencesService, ViewModeService). No Provider/Riverpod in use in current flows.
-- **Routing:** go_router (GoRouter). Redirect uses `_AuthStateNotifier` (ChangeNotifier) as `refreshListenable`; notifier holds a `StreamSubscription` to `FirebaseAuth.authStateChanges()` and disposes it in `dispose()`. **Issue:** `AppRouter` (and thus `_AuthStateNotifier`) is recreated on every `ArisEstheticianApp.build()`, so previous notifier is never disposed → **auth subscription leak** when app state rebuilds (e.g. version check or prefs).
-- **Persistence:** SharedPreferences (theme mode, aura enabled/intensity/color, remember me, keep signed in, saved email/password). Firestore for all business data and app_version.
-- **Firebase:** Auth (email/password, persistence LOCAL on web), Firestore (services, appointments, clients, business_settings, serviceCategories, notifications, software_enhancements, time_off, app_version, users). No Cloud Functions invoked from app in audited flow; no Analytics/Crashlytics in use.
+### A.2 Directory Sync (Clients Collection)
 
-### A.3 Key Flows
+| Aspect | Current Behavior |
+|--------|------------------|
+| Canonical directory | Firestore `clients` collection. ClientModel: id, firstName, lastName, email, phone, tags, internalNotes, totalAppointments, completedAppointments, noShowCount, totalSpentCents, createdAt, updatedAt, lastAppointmentAt. No `userId` field. |
+| When | After `createAppointment` (inside FirestoreService). |
+| Logic | `_syncClientFromAppointment`: query clients by `email == appointment.clientEmail`; if found, update (fill empty name/phone, increment totalAppointments); else create new client. Match is **email-only**; no phone-based deduplication. |
+| Reliability | Sync is in a try/catch; on failure, error is logged and rethrown but caller (createAppointment) catches and only logs—booking still succeeds. |
+| Idempotency | Update path is idempotent (same email → update). Create path can duplicate if two bookings with same email race (two creates). |
 
-- **Auth:** Splash → (optional) Welcome / Account choice → Login or Signup → redirect to /admin or /booking by role.
-- **Onboarding:** Splash (2s) → auth check → /admin, /booking, or /welcome.
-- **Navigation:** ShellRoute wraps all routes with AuraScreenWrapper; theme/aura from PreferencesService.
-- **Settings toggles:** Theme (light only), Aura (on/off, intensity, color theme). All persist via PreferencesService and load in SettingsScreen and main app; PreferencesService.notifyListeners() triggers rebuilds.
-- **Primary feature actions:** Client booking (multi-step + payment if enabled), admin CRUD (services, categories, appointments, clients, settings, time-off, notifications, software enhancements).
-- **Notifications:** In-app only (NotificationService writes to Firestore; admin screens use streams or one-off reads). No FCM push flow audited.
-- **Uploads/Downloads:** Business settings logo URL (no direct upload in audited code); no file upload/download flows that would require Blaze.
+**Gaps:** (1) Sync must be reliable (fail booking if directory sync fails). (2) Match by email and/or phone to avoid duplicates. (3) Validation: required fields and email/phone format must be enforced before submit (already in UI validators; ensure server-side or fail-fast).
 
----
+### A.3 Appointment Creation
 
-## B. Risk List (What Could Break)
+| Aspect | Current Behavior |
+|--------|------------------|
+| Data | AppointmentModel: clientFirstName, clientLastName, clientEmail, clientPhone, intakeNotes, startTime, endTime, serviceId, serviceSnapshot, status, deposit/tip/payment fields, createdAt, updatedAt, termsAcceptanceMetadata, healthDisclosure, requiredAcknowledgments, cancellationPolicyAcknowledged. No `userId`. |
+| Form snapshot | Terms, health disclosure, required acknowledgements, and cancellation boolean are stored on the appointment at submission time. |
+| Health disclosure schema | HealthDisclosure: booleans (hasSkinConditions, hasAllergies, etc.) + optional additionalNotes. No per-item “details” or “Not applicable” text. |
+| Required acknowledgements | RequiredAcknowledgments: four booleans. No timestamps or version on the appointment. |
+| Cancellation policy | Single boolean `cancellationPolicyAcknowledged`. No timestamp, policy version, or policy text hash. |
 
-| Risk | Location | Impact | Severity |
-|------|----------|--------|----------|
-| **Stream subscriptions never cancelled** | settings_screen (authStateChanges), admin_dashboard_screen (unread count stream), admin_appointments_screen (appointments stream), admin_notifications_screen (notifications + unread streams), admin_software_enhancements_screen (enhancements stream) | Memory leak, setState after dispose if stream emits after widget disposed, extra Firestore listeners | High |
-| **Auth notifier never disposed** | app_router.dart / main.dart | Each app rebuild creates new AppRouter → new _AuthStateNotifier and new auth subscription; old one never disposed → multiple auth listeners over time | Medium |
-| **Unbounded appointments stream** | admin_appointments_screen calls getAppointmentsStream() with no date range | Listener reads all appointments forever → Firestore read cost and free-tier risk | Medium |
-| **searchClients fetches all clients** | firestore_service.searchClients() | Calls getAllClients() then filters in memory → heavy read when client list grows | Low–Medium |
-| **Redirect calls isAdmin() multiple times** | app_router _handleRedirect | Up to 3x isAdmin() per redirect (logged-in unauth route, admin route, client route) → extra Firestore reads (users doc) | Low |
-| **Version check on every cold start** | main.dart | Single read to app_version/latest; acceptable but no caching (e.g. 24h) | Low |
-| **getPublicScheduleAppointmentsStream unbounded** | firestore_service | If used without date filter, full collection listener | Low (only if UI uses it unbounded) |
+**Gaps:** (1) Health disclosure: support full answers (e.g. list applicable items or “Not applicable” text per item). (2) Acknowledgements: store timestamps/version. (3) Cancellation: store checked, timestamp, policy version or hash.
 
----
+### A.4 Form Submissions
 
-## C. Firebase Free-Tier Risk Points (Reads / Writes / Listeners)
+| Form | Stored On | Current |
+|------|-----------|---------|
+| Client info | Appointment + (best-effort) clients | First/last/email/phone on appointment; clients sync best-effort. |
+| Health & Skin Disclosure | Appointment | Boolean flags + optional additionalNotes. |
+| Required Acknowledgements | Appointment | Four booleans. |
+| Terms & Conditions | Appointment | termsAcceptanceMetadata (accepted, UTC/local time, ip, userAgent, platform, osVersion). |
+| Cancellation policy | Appointment | Boolean only. |
 
-| Item | Type | Risk | Note |
-|------|------|------|------|
-| **getAppointmentsStream()** (no params) | Listener | **High** | Admin appointments screen subscribes with no startDate/endDate → listens to entire appointments collection; every change triggers read. |
-| **getAppointmentsByClientEmailStream(email)** | Listener | Medium | Bounded by clientEmail; acceptable if used sparingly. |
-| **getPublicScheduleAppointmentsStream()** | Listener | Medium | whereIn status + orderBy startTime; unbounded in time. |
-| **getActiveCategoriesStream()** | Listener | Low | Small collection. |
-| **getSoftwareEnhancementsStream()** | Listener | Low | Typically small. |
-| **getTimeOffStream()** | Listener | Low | Typically small. |
-| **getNotificationsStream()** | Listener | Medium | Can grow; admin notifications screen keeps listener open. |
-| **getUnreadNotificationsCountStream()** | Listener | Low | Single collection query. |
-| **getAllNotifications(includeArchived)** | One-off get() | Medium | Fetches full list; no pagination. |
-| **getAllClients()** | One-off get() | Medium | Used by admin clients list and searchClients; no pagination. |
-| **getAllAppointments()** | One-off get() | Medium | Used for admin; no pagination. |
-| **Version check** | One-off get() | Low | 1 read per app start to app_version/latest. |
-| **Auth getUserRole / isAdmin** | One-off get() | Low | 1 read per call to users/{uid}. |
-| **Notification creation on appointment events** | Writes | Low | Proportional to appointment actions. |
+All form data is captured and written to the appointment document; the shortfalls are schema (full answers for health, timestamps/version for acknowledgements and cancellation) and reliability of directory sync.
 
-**Summary:** Biggest free-tier risks are (1) unbounded **getAppointmentsStream()** in admin appointments screen, and (2) **multiple long-lived listeners** (appointments, notifications, enhancements, unread count) that are not cancelled when screens dispose, so they keep consuming reads and connections.
+### A.5 Account Creation / Login
 
----
+| Flow | Current Behavior |
+|------|------------------|
+| Signup | AuthService.signUpWithEmailAndPassword: create Firebase user, set users/{uid} (email, role, createdAt, updatedAt). If role client: getOrCreateClient by email (create client with empty first/last/phone if not exists). No linking of **existing** guest appointments to new user. |
+| Clients collection | No `userId` field. Client record created at signup has empty name/phone until first booking. |
+| Appointments | No `userId` field. Queried by clientEmail only. |
 
-## D. Performance Hotspots
+**My Appointments (client_appointments_screen):** Loads `_clientEmail = currentUser.email`; uses `getAppointmentsByClientEmailStream(_clientEmail!)`. So **all appointments with that email** (including those created as guest) already appear—**provided the guest used the same email**. There is no explicit “linking” step; it’s implicit by email match.
 
-| Location | Issue | Impact |
-|---------|--------|--------|
-| **admin_appointments_screen** | getAppointmentsStream() with no date range + stream.listen not cancelled | Heavy initial + ongoing reads; rebuilds on every appointment change; leak. |
-| **admin_notifications_screen** | Two streams (list + unread count), neither cancelled | Rebuilds and listener growth when leaving screen. |
-| **admin_dashboard_screen** | getUnreadNotificationsCountStream().listen() not cancelled | Listener leak when leaving dashboard. |
-| **admin_software_enhancements_screen** | getSoftwareEnhancementsStream().listen() not cancelled | Listener leak. |
-| **settings_screen** | authStateChanges.listen() not cancelled | Auth listener leak. |
-| **client_booking_screen** | _loadBusinessSettings().then(...) without unawaited / cancel | Acceptable (mounted checks inside). |
-| **app_router redirect** | Multiple await _authService.isAdmin() per redirect | Extra Firestore reads; consider caching role per session. |
-| **firestore_service.searchClients** | getAllClients() then in-memory filter | O(n) reads; consider Firestore query + limit for large client lists. |
-| **ArisEstheticianApp.build()** | Creates new AppRouter().router on every build | New auth notifier + subscription each time; old notifier never disposed. |
+**Gaps:** (1) Optional `userId` on appointments and clients for explicit linking and future queries by uid. (2) On signup (or a dedicated “Link my bookings” action), set userId on client doc and on all appointments where clientEmail (and optionally phone) match. (3) Strong match rules (e.g. email required; phone optional) to avoid incorrect merges. (4) Client history: support loading by userId when present, else by email (backwards compat).
+
+### A.6 Admin Preview / Print
+
+| Current | Gap |
+|--------|-----|
+| Admin Appointments: list/calendar, filters, status updates, create appointment. Appointment detail dialog shows client, date/time, service, status, deposit, notes, admin notes; actions: Update Status, Close. **No preview/print PDF.** | Requirement: In admin “Quick actions,” add ability to preview an appointment (including all forms/disclosures/acknowledgements) and print as PDF. PDF must include client identity, appointment details, full disclosure answers, acknowledgements and policy agreement, submission timestamps. |
+| Admin Services: has full PDF export for services list. | N/A (appointment PDF is separate). |
 
 ---
 
-## E. Fix Plan (Ordered Steps)
+## B. Gaps vs. Requirements (Checklist)
 
-| Step | File(s) | Change | Why safe | How to verify |
-|------|---------|--------|----------|----------------|
-| 1 | settings_screen.dart | Store StreamSubscription from authStateChanges.listen; cancel in dispose(). | No behavior change; only cancels when widget is disposed. | Open Settings, leave screen; confirm no leak (no setState after dispose). |
-| 2 | admin_dashboard_screen.dart | Store StreamSubscription from getUnreadNotificationsCountStream().listen(); cancel in dispose(). | Same. | Enter/leave dashboard repeatedly; no leak. |
-| 3 | admin_appointments_screen.dart | (a) Store StreamSubscription from getAppointmentsStream().listen(); cancel in dispose(). (b) Optionally pass date range to getAppointmentsStream() to limit reads (e.g. last 12 months + next 12 months). | (a) Prevents leak. (b) Reduces Firestore reads; backward compatible if service supports optional params. | Leave screen → subscription cancelled; with (b) confirm list still loads for intended range. |
-| 4 | admin_notifications_screen.dart | Store both StreamSubscriptions (notifications + unread count); cancel both in dispose(). | No behavior change. | Enter/leave notifications screen; both streams cancelled. |
-| 5 | admin_software_enhancements_screen.dart | Store StreamSubscription from getSoftwareEnhancementsStream().listen(); cancel in dispose(). | No behavior change. | Enter/leave screen; subscription cancelled. |
-| 6 | app_router.dart / main.dart | Keep single _AuthStateNotifier and GoRouter instance: e.g. create AppRouter once and reuse (e.g. in State or static/singleton), or ensure GoRouter disposes refreshListenable. Minimal fix: make AppRouter a singleton and expose router so not recreated on every build. | Stops creating new auth subscription on every app rebuild. | Rebuild app (e.g. toggle prefs); only one auth listener active; no accumulation. |
-| 7 | firestore_service.dart (optional) | Add optional startDate/endDate to getAppointmentsStream() and use in query when provided. | Reduces reads when admin uses date-bounded view. | Admin appointments: pass range; confirm list and stream still work. |
-| 8 | (Optional) app_router.dart | Cache isAdmin() result for current user for redirect (e.g. until logout or uid change) to avoid 3x Firestore read per redirect. | Fewer reads; same redirect behavior. | Login as admin/client; redirect unchanged; fewer user doc reads. |
-
-Implementation completed: steps 1–7 (stream subscription fixes in all five screens, single AppRouter + dispose, date-bounded appointments stream). Step 8 (cache isAdmin) deferred.
+| # | Requirement | Current State | Gap |
+|---|-------------|--------------|-----|
+| 1 | Guest checkout directory sync: capture and persist first_name, last_name, email, phone_number | Captured on appointment; clients sync best-effort after create | Make directory sync mandatory (fail booking if sync fails); validate required + email/phone format; match by email and/or phone, update existing instead of duplicate |
+| 2 | Health & Skin Disclosure: required; list applicable or “Not applicable”; sync to appointment; full answers not just boolean | Required in UI; booleans + optional additionalNotes stored on appointment | Add per-item detail/“Not applicable” support (schema + UI); keep booleans for backwards compat; require each item answered (applicable or N/A) |
+| 3 | Required Acknowledgements: required; sync to appointments with set of acknowledgements and timestamps/version | Required in UI; four booleans on appointment | Add acknowledgedAt (and optional version) to appointment snapshot |
+| 4 | Cancellation/no-show policy: required; sync to appointments; store checked, timestamp, policy version or hash | Required in UI; boolean only on appointment | Add cancellationPolicySnapshot: { acknowledged, acknowledgedAt, policyVersion or policyTextHash } |
+| 5 | Backwards compatibility: no breaking changes; additive migrations; existing records still work | N/A | All new fields nullable/defaulted; existing appointments without new fields must still display and function |
+| 6 | Account creation → full history visible; link guest data via email/phone; avoid incorrect merges | History by email only; no userId; same-email guest bookings already show after signup | Add optional userId to appointments/clients; on signup (or link action), set userId; client appointments: query by uid if present else email; document strong match rules |
+| 7 | Admin: Quick actions — preview appointment (forms/disclosures/acknowledgements), print PDF | No appointment PDF | Add “Preview / Print PDF” for selected appointment in admin appointments (e.g. in detail dialog or list actions); PDF content as specified |
 
 ---
 
-## F. Verification Checklist (Post-Fix)
+## C. Risks and Edge Cases
 
-Use this to verify every feature, setting, button, and toggle after the audit fixes.
-
-### Bootstrap & routing
-- [ ] App starts; splash shows then redirects (welcome / booking / admin by auth).
-- [ ] Firebase error screen shows if Firebase fails; copy diagnostic works.
-- [ ] Version check loading shows then normal app or update required screen.
-- [ ] Update required screen shows when Firestore version requires update; app otherwise enters normally.
-- [ ] Router: navigate to /welcome, /login, /signup, /booking, /appointments, /settings.
-- [ ] Router: logged-in admin → /admin and all admin routes; logged-in client → /booking, /appointments, /settings; non-admin cannot open /admin.
-- [ ] Shell: aura/theme changes (Settings) rebuild shell (aura background).
-
-### Auth
-- [ ] Login: email/password, remember me, keep signed in; saved email/password prefill and persist.
-- [ ] Login: success → redirect admin or client; failure shows error.
-- [ ] Signup: create account; client record created when role client.
-- [ ] Logout (Settings): clears session; redirect to welcome/login.
-- [ ] Session restore: restart app with keep signed in → still logged in.
-
-### Settings (all must persist and load on restart)
-- [ ] Theme: light only (dark/auto disabled); setting persists and loads.
-- [ ] Aura: on/off toggle persists and loads.
-- [ ] Aura intensity: low/medium/high persists and loads.
-- [ ] Aura color theme: warm/cool/spa/sunset persists and loads.
-- [ ] Changelog: expand/collapse.
-- [ ] Copy diagnostic report (when diagnostics have failures).
-
-### Client flows
-- [ ] Booking: service selection → date/time → client info → payment (if enabled) → confirmation; guest and logged-in.
-- [ ] Booking: categories, search, calendar, time slots, health disclosures, terms, cancellation policy.
-- [ ] Confirmation: screen shows for appointment ID; tip/payment if applicable.
-- [ ] My Appointments: tabs Upcoming / Past; list loads; add appointment → booking.
-
-### Admin flows
-- [ ] Dashboard: loads; unread notifications badge; quick links (services, appointments, clients, settings, etc.).
-- [ ] Services: list, create, edit, delete; categories filter if used.
-- [ ] Appointments: list and calendar view; filters (status, date range, search); create/edit appointment; status updates; date-bounded stream (no unbounded read).
-- [ ] Clients: list, search, create, edit.
-- [ ] Business settings: load/save all fields (name, contact, hours, policies, Stripe, etc.).
-- [ ] Categories: list, create, edit, soft delete.
-- [ ] Earnings: screen loads.
-- [ ] Notifications: list, mark read, archive; unread count updates.
-- [ ] Software enhancements (superAdmin): list, create, edit, delete.
-- [ ] Time-off: list, create, edit, delete.
-
-### Correctness after fixes (no regressions)
-- [ ] Leaving Settings → auth subscription cancelled (no leak).
-- [ ] Leaving Admin Dashboard → unread count subscription cancelled.
-- [ ] Leaving Admin Appointments → appointments subscription cancelled; list still loads for _firstDay–_lastDay.
-- [ ] Leaving Admin Notifications → both subscriptions cancelled.
-- [ ] Leaving Admin Software Enhancements → enhancements subscription cancelled.
-- [ ] App rebuild (e.g. prefs/version) → single router/notifier; dispose on app dispose.
-
-### Manual test steps (if automated tests not run)
-1. Open Settings, toggle aura, go back; restart app → aura value persisted.
-2. Open Admin Dashboard, then Admin Notifications, then back to Dashboard → no duplicate listeners.
-3. Open Admin Appointments → confirm list shows appointments in ±1 year range only.
-4. Log in as admin, navigate to all admin screens, then log out → no crashes.
+| Risk | Mitigation |
+|------|------------|
+| Directory sync fails (network, rules) and we now fail booking | Retry once; clear error message; log sync failures. Ensure Firestore rules allow create/update clients (currently admin-only—guests cannot write clients; sync runs server-side or must be done in a context that can write clients). **Critical:** Today guests cannot write to `clients`; only admin can. So directory sync from client/guest booking runs in the **same** Firestore context as the booking (client app). Check rules: `allow write: if isAdmin()` — so **guest cannot create/update clients**. Directory sync in createAppointment is done from the **client** (guest) app, so it will **always fail** for guests. Fix: either (a) allow create/update clients when request is from appointment create (not possible in rules by “who created appointment”), or (b) run client sync in Cloud Function triggered by appointment create (then sync is reliable and server-side), or (c) allow authenticated-or-unauthenticated write to clients for a limited structure (e.g. create/update own by email). **Conclusion:** Current “sync” from guest booking likely fails silently due to rules (clients write is admin-only). Need to fix rules or move sync to Cloud Function. |
+| Two guests same email race → duplicate client docs | Use transaction or “getOrCreate” by email+phone; prefer single query by email, then create if not exists (Firestore doesn’t have unique constraint; duplicate clients possible). Idempotent update by email minimizes duplicates; add phone match for linking. |
+| Health disclosure “full answers”: migration of existing data | Add new optional fields (e.g. detail strings); existing records remain valid with booleans only. UI: require each item either checked or “Not applicable” (or detail). |
+| Old appointments without cancellationPolicySnapshot | Backwards compat: treat missing as cancellationPolicyAcknowledged == true if boolean true, else false; no timestamp. Display “Legacy” or “—”. |
+| Account linking: wrong person gets linked | Match rules: require exact email match; optionally require phone match for linking (or email OR phone with caution). Document: link only when email matches; if phone provided, can require phone match for extra safety. |
+| PDF generation: missing or null fields on old appointments | Null-safe PDF; show “—”“N/A” for missing disclosure/acknowledgement/cancellation snapshot. |
 
 ---
 
-## 1. What Is Fixed and Working (Previous Audit)
+## D. Backwards Compatibility Summary
 
-## 1. What Is Fixed and Working
-
-### 1.1 Core & Bootstrap
-- **main.dart** — Entry point, Flutter binding, Firebase init, version check, error/update screens. Graceful fallback if Firebase or router fails.
-- **firebase_config.dart** — Initializes Firebase with `DefaultFirebaseOptions.currentPlatform`; safe substring logging for API Key/App ID (no null-aware on non-nullable).
-- **firebase_options.dart** — Present in `lib/core/config/`; web config filled; Android/iOS/macOS placeholders (run `flutterfire configure` for native).
-
-### 1.2 Routing & Auth
-- **app_router.dart** — GoRouter: splash, welcome, account-choice, login, signup, client (booking, confirmation, appointments), admin (dashboard, services, appointments, clients, settings, categories, earnings, notifications, software enhancements, time-off), settings. Redirect waits for auth restoration; admin vs client enforced.
-- **AuthService** — Sign in/up, sign out, role from Firestore `users/{uid}`, `isAdmin`/`isSuperAdmin`, password reset, `waitForAuthStateRestoration`, `restoreSessionIfEnabled`, `checkExistingSession`. Client record created on signup when role is client.
-- **LoginScreen** — Form, remember me / keep signed in, preference load/save, admin vs client redirect, error handling, version footer.
-
-### 1.3 Firestore & Business Logic
-- **FirestoreService** — Services (active/all, CRUD), appointments (create with overlap check, client sync, notifications), clients (getOrCreate, sync from appointment, stats on status change, recalc, search), business settings, categories (active/all, CRUD, soft delete), software enhancements, time-off (CRUD, range, stream). **isTimeSlotAvailable** uses business hours, overlap check, and time-off; **time_off** is now publicly readable so guest booking works.
-- **NotificationService** — Notifications for appointment created/updated/canceled/status-changed.
-- **PreferencesService** — Remember me, keep signed in, saved email/password, clear methods. Singleton, SharedPreferences.
-
-### 1.4 Models
-- **ClientModel** — `create`, `fromFirestore`, `toFirestore`, `copyWith`; used by auth signup and FirestoreService.
-- **AppointmentModel**, **ServiceModel**, **ServiceCategoryModel**, **BusinessSettingsModel**, **TimeOffModel**, **NotificationModel**, **SoftwareEnhancementModel** — Used consistently; `.g.dart` generated.
-
-### 1.5 Client Booking
-- **ClientBookingScreen** — Multi-step flow (service → date/time → client info → payment → confirmation). Categories, search, calendar, time slots, client form, health disclosures, terms, Stripe when `_paymentsEnabled`. Admin “view as client” via ViewModeService. Single import of `appointment_model.dart` (duplicate removed).
-
-### 1.6 Version & Update
-- **VersionCheckService** — Reads Firestore `app_version/latest`, compares version/build, skips in dev (`AppVersion.isDevelopment`). Fail-open on error/timeout.
-- **AppVersion** — `version`, `buildNumber`, `environment`, `versionString`, `compareVersions`, `isDevelopment`.
-
-### 1.7 UI & Theming
-- **AppTheme**, **AppColors**, **AppTypography** — Used across screens.
-- **SplashScreen** — 2s delay, auth check, redirect to /admin, /booking, or /welcome.
-- **WelcomeScreen**, **AccountChoiceScreen**, **UpdateRequiredScreen** — Entry, account choice, and update gate.
-
-### 1.8 Firestore Rules (Current — All Correct)
-- **users** — Own read; create own on signup; update own or admin; delete admin only.
-- **services, business_settings, app_version, serviceCategories** — Public read; admin write (or superAdmin where intended).
-- **appointments** — Create public; read for admin, authenticated, or recent (1h) for confirmation; update/delete admin only.
-- **clients** — Read admin or own (by email); write admin only.
-- **payments, availability** — Admin only / public read + admin write as defined.
-- **notifications** — Admin read; create authenticated (to be tightened later).
-- **software_enhancements** — superAdmin only.
-- **time_off** — **Public read** (so guests can check availability); create/update/delete admin only.
-
-### 1.9 Firestore Indexes (Current — In File and Deployable)
-- **appointments** — (startTime ASC, status ASC), (status ASC, startTime ASC), (clientEmail ASC, startTime DESC).
-- **clients** — (lastName ASC, firstName ASC) only. Single-field (email) removed from file to avoid Firestore 400 “single field index controls.”
-- **services** — (isActive ASC, displayOrder ASC).
-- **serviceCategories** — (isActive DESC, sortOrder ASC, name ASC), (isActive ASC, sortOrder ASC, name ASC).
-- **time_off** — (isActive ASC, startTime ASC).
-
-### 1.10 Firebase CLI
-- **firebase.json** — firestore (rules + indexes), storage, functions, hosting (build/web).
-- **.firebaserc** — default project `ari-s-esthetician-app`. Enables `firebase deploy --only firestore` / `firestore:rules` from project root.
+- **Appointment:** Add optional fields only: health disclosure details (optional map/strings), requiredAcknowledgmentsTimestamp (optional), cancellationPolicySnapshot (optional). Existing documents without these remain valid; readers must handle null/absent.
+- **Client:** Add optional `userId`. Existing clients without userId remain valid; “My Appointments” continues to use email when userId is null.
+- **Firestore rules:** If we allow non-admin write to clients for sync, restrict to create/update only for the document that matches the appointment’s email (e.g. allow create if no existing client with that email; allow update if resource.data.email == incoming email). Or keep admin-only and implement sync in Cloud Function on appointment create.
+- **API:** No removal or renaming of existing fields; no change to existing query patterns except additive (e.g. optional filter by userId).
 
 ---
 
-## 2. What Was Broken and Is Now Fixed
+## E. Assumptions
 
-| Issue | Fix Applied |
-|-------|-------------|
-| **Guest booking (critical)** — time_off read required auth; guests got permission denied when checking availability | `firestore.rules`: **time_off** set to `allow read: if true;`; write remains admin-only. Rules deployed. |
-| **firebase_config.dart** — Unnecessary `?.` on non-nullable apiKey/appId; analyzer warning | Replaced with safe `substring(0, min(10, length))` for API Key and App ID. |
-| **client_booking_screen.dart** — Duplicate import of `appointment_model.dart` | Removed duplicate; single import retained. |
-| **firestore index deploy** — 400 on clients index (“not necessary, single field index controls”) | Removed single-field **clients (email)** from `firestore.indexes.json`; kept **clients (lastName, firstName)**. |
-| **Missing composite indexes** — appointments by clientEmail; serviceCategories; time_off | Added to `firestore.indexes.json`: appointments (clientEmail, startTime DESC), serviceCategories (both variants), time_off (isActive, startTime). |
-| **Firebase CLI** — “Not in a Firebase app directory (could not locate firebase.json)” | Created `firebase.json` and `.firebaserc` in project root. |
+1. **Directory sync from client:** Firestore rules currently allow only admin to write clients. The audit assumes we will either (1) add a rule that allows create/update of a client document when the request comes from an unauthenticated or authenticated user and the document’s email matches a single canonical rule (e.g. create with email in request), or (2) implement directory sync in a Cloud Function (onCreate appointment) so sync is server-side and reliable. Implementation plan will choose one and document.
+2. **Health “full answers”:** “List applicable items or explicitly enter ‘Not applicable’” is implemented as: each disclosure item has either a boolean true + optional detail text, or boolean false + optional “Not applicable” (or equivalent) so that every item is explicitly answered.
+3. **Policy version/hash:** Cancellation policy text is in TermsAndConditions; we can store a policy version string (e.g. "1.0") or a hash of the policy text at submission time; version is optional and can be added later.
+4. **Account linking:** “Full history” is achieved by (a) continuing to show appointments by clientEmail for signed-in user, and (b) optionally setting userId on those appointments and on the client record at signup so future queries can use userId; backwards compat by still supporting email-based fetch.
 
 ---
 
-## 3. What Is Still Missing or Optional
+## F. Firestore Rules Note (Critical)
 
-### 3.1 Optional Features (Documented, Not Blocking)
-- **Forgot Password** — Mentioned in LoginScreen “Suggestions”; no link or handler. Optional.
-- **Dark theme** — Commented out in main.dart; not implemented.
-- **Custom Sunflower font** — pubspec assets/fonts commented out; not in use.
-- **firebase_options for native** — Android/iOS/macOS use placeholders; run `flutterfire configure` when building for those platforms.
+Current snippet:
 
-### 3.2 Cleanup (Non-Blocking)
-- **lib/screens/admin/dart** — Empty file; no purpose. Safe to delete.
-- **html_stub.dart** — Used by `admin_services_screen.dart` conditional import for non-web; keep. **dart:html** in `device_metadata_service_web.dart` is deprecated (use package:web / dart:js_interop later); info only.
-- **Unused imports** — e.g. device_metadata_service (package_info_plus), email_service (mailer, business_settings_model), payment_service (http, dart:convert, app_constants, business_settings_model). Can be removed for cleaner analyze.
-- **Logging style** — AuthService uses `AppLogger().logInfo(...)`; app_router and others use global `logAuth`, `logRouter`, etc. Both work; standardizing is optional.
+```text
+match /clients/{clientId} {
+  allow read: if isAdmin() || (isAuthenticated() && resource.data.email == request.auth.token.email);
+  allow write: if isAdmin();
+}
+```
 
-### 3.3 Analyzer Summary (Current)
-- **No fatal/blocking errors.** Build and run are OK.
-- **Warnings:** Unused imports (device_metadata_service, email_service, payment_service), unused local variables, one unnecessary non-null assertion (payment_service). Fix when convenient.
-- **Info:** Many `prefer_const_*`, `deprecated_member_use` (e.g. `withOpacity` → `.withValues()`), `use_build_context_synchronously`, `avoid_web_libraries_in_flutter` (dart:html). Style and deprecation; not blocking.
-
-### 3.4 Dependencies (Unused in Audited Flow)
-- **Provider / Riverpod** — In pubspec; state is widget + services in reviewed flow. Use later or remove to trim deps.
+So **only admin** can create/update clients. Guest booking runs in the **client** (unauthenticated or authenticated as client) context; therefore **`_syncClientFromAppointment` in FirestoreService.createAppointment will fail with permission denied** when the booker is a guest (or any non-admin). The catch block in createAppointment logs the error and does not rethrow to the caller, so the booking **succeeds** but the client record is **not** created/updated. This explains “best-effort” behavior and confirms that **reliable guest directory sync requires a rules change or server-side sync (e.g. Cloud Function)**.
 
 ---
 
-## 4. Summary Table (Current State)
-
-| Category | Status |
-|----------|--------|
-| App bootstrap | OK |
-| Firebase init | OK |
-| Routing & redirect | OK |
-| Auth (login/signup/role) | OK |
-| Firestore services | OK |
-| Client booking flow | OK |
-| Guest booking (time_off) | OK (rules fixed, deployed) |
-| Version check | OK |
-| Firestore rules | OK (all collections correct) |
-| Firestore indexes | OK (composites in file; clients single-field removed) |
-| Firebase CLI deploy | OK (firebase.json + .firebaserc) |
-| Analyzer | Warnings + info only; no blocking errors |
-| Stray file | 1 empty (`lib/screens/admin/dart`) — cleanup only |
-
----
-
-## 5. Recommended Next Steps (Optional)
-
-1. **Cleanup:** Delete `lib/screens/admin/dart`; remove unused imports in device_metadata_service, email_service, payment_service.
-2. **Optional features:** Forgot Password from login; dark theme; native firebase_options via `flutterfire configure` when targeting Android/iOS.
-3. **Deprecations:** Plan migration from `withOpacity` to `.withValues()` and from `dart:html` to package:web / dart:js_interop (low priority).
-4. **Index deploy:** Run `firebase deploy --only firestore` to push current indexes if not already done; confirm no 400 on clients.
-
----
-
-## 6. iOS Compliance (January 30, 2026)
-
-A separate **iOS audit** was completed. See **IOS_AUDIT.md** for the full checklist. Summary:
-
-- **iOS platform added** via `flutter create --platforms=ios .` (previously missing).
-- **Info.plist** updated with **LSApplicationQueriesSchemes** (required for `url_launcher` on iOS).
-- **Podfile** and Xcode set to **iOS 15.0** minimum (required by cloud_firestore 6.x).
-- **App constants** `minIOSVersion` set to 15 to match.
-- **Before App Store:** Run `flutterfire configure` (add iOS app in Firebase), add `GoogleService-Info.plist`, set signing in Xcode, replace App Store URL placeholder in `update_required_screen.dart`.
-
----
-
-*End of audit. Application is in a good state for production use of core flows (web); native and polish items are optional. iOS is configured and documented in IOS_AUDIT.md.*
+*End of audit. See IMPLEMENTATION_PLAN.md for step-by-step changes and schema.*

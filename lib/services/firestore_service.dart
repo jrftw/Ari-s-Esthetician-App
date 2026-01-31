@@ -17,6 +17,7 @@ import '../models/client_model.dart';
 import '../models/business_settings_model.dart';
 import '../models/software_enhancement_model.dart';
 import '../models/time_off_model.dart';
+import '../models/coupon_model.dart';
 import '../core/constants/app_constants.dart';
 import '../core/logging/app_logger.dart';
 import 'notification_service.dart';
@@ -177,18 +178,8 @@ class FirestoreService {
 
       AppLogger().logInfo('Appointment created: ${docRef.id}', tag: 'FirestoreService');
       
-      // Sync client data - create or update client record
-      try {
-        await _syncClientFromAppointment(appointment);
-      } catch (e, stackTrace) {
-        // Log error but don't fail appointment creation if client sync fails
-        AppLogger().logError(
-          'Failed to sync client data for appointment',
-          tag: 'FirestoreService',
-          error: e,
-          stackTrace: stackTrace,
-        );
-      }
+      // Directory (client) sync is performed by Cloud Function onAppointmentCreated
+      // so guest and non-admin users do not need write access to clients collection.
       
       // Create notification for admin
       _notificationService.createAppointmentCreatedNotification(
@@ -933,6 +924,65 @@ class FirestoreService {
     }
   }
 
+  /// Link client and all appointments (by clientEmail) to a user ID (account linking).
+  /// Strong match: email required. Call after signup so "My Appointments" shows full history.
+  /// Logs linking actions and failures.
+  Future<void> linkClientAndAppointmentsToUser({
+    required String uid,
+    required String email,
+    String? phone,
+  }) async {
+    try {
+      final clientSnapshot = await _firestore
+          .collection(AppConstants.firestoreClientsCollection)
+          .where('email', isEqualTo: email)
+          .limit(1)
+          .get();
+
+      if (clientSnapshot.docs.isNotEmpty) {
+        await clientSnapshot.docs.first.reference.update({
+          'userId': uid,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        AppLogger().logInfo(
+          'Account linking: client ${clientSnapshot.docs.first.id} linked to uid $uid',
+          tag: 'FirestoreService',
+        );
+      } else {
+        AppLogger().logWarning(
+          'Account linking: no client found for email $email',
+          tag: 'FirestoreService',
+        );
+      }
+
+      final appointmentsSnapshot = await _firestore
+          .collection(AppConstants.firestoreAppointmentsCollection)
+          .where('clientEmail', isEqualTo: email)
+          .get();
+
+      int updated = 0;
+      for (final doc in appointmentsSnapshot.docs) {
+        await doc.reference.update({
+          'userId': uid,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        updated++;
+      }
+      AppLogger().logInfo(
+        'Account linking: $updated appointment(s) linked to uid $uid for email $email',
+        tag: 'FirestoreService',
+      );
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Account linking failed for email $email',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
   /// Search clients by name, email, or phone
   Future<List<ClientModel>> searchClients(String query) async {
     try {
@@ -1618,6 +1668,188 @@ class FirestoreService {
       );
       // Return empty stream on error
       return Stream.value([]);
+    }
+  }
+
+  // MARK: - Coupon Operations
+  /// Returns true if at least one active coupon exists (used to show/hide coupon section on booking)
+  Future<bool> hasActiveCoupons() async {
+    try {
+      final snapshot = await _firestore
+          .collection(AppConstants.firestoreCouponsCollection)
+          .where('isActive', isEqualTo: true)
+          .limit(1)
+          .get();
+      return snapshot.docs.isNotEmpty;
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to check active coupons',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      return false;
+    }
+  }
+
+  /// Get all coupons (active and inactive) for admin management
+  Future<List<CouponModel>> getAllCoupons() async {
+    try {
+      final snapshot = await _firestore
+          .collection(AppConstants.firestoreCouponsCollection)
+          .orderBy('code')
+          .get();
+
+      return snapshot.docs
+          .map((doc) => CouponModel.fromFirestore(doc))
+          .toList();
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to get all coupons',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Get coupon by code (case-insensitive)
+  /// Returns null if not found
+  Future<CouponModel?> getCouponByCode(String code) async {
+    if (code.trim().isEmpty) return null;
+    try {
+      final normalizedCode = code.trim().toUpperCase();
+      final snapshot = await _firestore
+          .collection(AppConstants.firestoreCouponsCollection)
+          .where('codeNormalized', isEqualTo: normalizedCode)
+          .limit(1)
+          .get();
+
+      if (snapshot.docs.isEmpty) return null;
+      return CouponModel.fromFirestore(snapshot.docs.first);
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to get coupon by code',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Validate coupon for use: active, within date range, under usage limit
+  /// Returns the coupon if valid; throws with message if invalid
+  Future<CouponModel> validateCoupon(String code) async {
+    final coupon = await getCouponByCode(code);
+    if (coupon == null) {
+      throw Exception('Invalid or expired coupon code');
+    }
+    if (!coupon.isActive) {
+      throw Exception('This coupon is no longer active');
+    }
+    final now = DateTime.now();
+    if (coupon.validFrom != null && now.isBefore(coupon.validFrom!)) {
+      throw Exception('This coupon is not yet valid');
+    }
+    if (coupon.validUntil != null && now.isAfter(coupon.validUntil!)) {
+      throw Exception('This coupon has expired');
+    }
+    if (coupon.usageLimit != null && coupon.timesUsed >= coupon.usageLimit!) {
+      throw Exception('This coupon has reached its usage limit');
+    }
+    return coupon;
+  }
+
+  /// Create a new coupon
+  Future<String> createCoupon(CouponModel coupon) async {
+    try {
+      final data = coupon.toFirestore();
+      data['codeNormalized'] = coupon.code.trim().toUpperCase();
+      final docRef = await _firestore
+          .collection(AppConstants.firestoreCouponsCollection)
+          .add(data);
+
+      AppLogger().logInfo('Coupon created: ${docRef.id}', tag: 'FirestoreService');
+      return docRef.id;
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to create coupon',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Update an existing coupon
+  Future<void> updateCoupon(CouponModel coupon) async {
+    try {
+      final data = coupon.copyWith(updatedAt: DateTime.now()).toFirestore();
+      data['codeNormalized'] = coupon.code.trim().toUpperCase();
+      await _firestore
+          .collection(AppConstants.firestoreCouponsCollection)
+          .doc(coupon.id)
+          .update(data);
+
+      AppLogger().logInfo('Coupon updated: ${coupon.id}', tag: 'FirestoreService');
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to update coupon',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Delete a coupon
+  Future<void> deleteCoupon(String couponId) async {
+    try {
+      await _firestore
+          .collection(AppConstants.firestoreCouponsCollection)
+          .doc(couponId)
+          .delete();
+
+      AppLogger().logInfo('Coupon deleted: $couponId', tag: 'FirestoreService');
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to delete coupon',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Increment coupon usage count (call after successful booking with coupon)
+  Future<void> incrementCouponUsage(String couponId) async {
+    try {
+      final docRef = _firestore
+          .collection(AppConstants.firestoreCouponsCollection)
+          .doc(couponId);
+      await _firestore.runTransaction((transaction) async {
+        final snapshot = await transaction.get(docRef);
+        if (!snapshot.exists) return;
+        final current = (snapshot.data()?['timesUsed'] as num?)?.toInt() ?? 0;
+        transaction.update(docRef, {
+          'timesUsed': current + 1,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      });
+      AppLogger().logInfo('Coupon usage incremented: $couponId', tag: 'FirestoreService');
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to increment coupon usage',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
     }
   }
 }

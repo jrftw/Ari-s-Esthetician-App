@@ -139,6 +139,19 @@ class BusinessSettingsModel extends Equatable {
   @JsonKey(defaultValue: false)
   final bool paymentsEnabled;
   
+  /// Whether to require compliance forms at booking: Health & Skin Disclosure,
+  /// Required Acknowledgements, Terms & Conditions, and Cancellation & No-Show Policy.
+  /// When true, all four sections are shown and required; when false, none are shown.
+  /// Stored appointments may or may not have compliance data (backwards compatible).
+  @JsonKey(defaultValue: true)
+  final bool requireComplianceForms;
+  
+  /// Whether to allow same-day booking. When true, clients can book today; only times
+  /// that have not yet passed are shown (e.g. at 4 PM they cannot pick 9 AM).
+  /// When false, clients cannot book within 24 hours (first bookable slot is 24h from now).
+  @JsonKey(defaultValue: true)
+  final bool allowSameDayBooking;
+  
   /// Timestamp when settings were created
   @JsonKey(fromJson: _timestampFromJson, toJson: _timestampToJson)
   final DateTime createdAt;
@@ -175,6 +188,8 @@ class BusinessSettingsModel extends Equatable {
     this.minDepositAmountCents,
     this.cancellationFeeCents,
     this.paymentsEnabled = false,
+    this.requireComplianceForms = true,
+    this.allowSameDayBooking = true,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -235,6 +250,8 @@ class BusinessSettingsModel extends Equatable {
       bookingPolicyText: 'A non-refundable deposit is required to confirm your appointment.',
       timezone: 'America/New_York',
       weeklyHours: defaultWeeklyHours,
+      requireComplianceForms: true,
+      allowSameDayBooking: true,
       createdAt: now,
       updatedAt: now,
     );
@@ -307,6 +324,8 @@ class BusinessSettingsModel extends Equatable {
     String? stripePublishableKey,
     String? stripeSecretKey,
     bool? paymentsEnabled,
+    bool? requireComplianceForms,
+    bool? allowSameDayBooking,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -337,6 +356,8 @@ class BusinessSettingsModel extends Equatable {
       minDepositAmountCents: minDepositAmountCents ?? this.minDepositAmountCents,
       cancellationFeeCents: cancellationFeeCents ?? this.cancellationFeeCents,
       paymentsEnabled: paymentsEnabled ?? this.paymentsEnabled,
+      requireComplianceForms: requireComplianceForms ?? this.requireComplianceForms,
+      allowSameDayBooking: allowSameDayBooking ?? this.allowSameDayBooking,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
     );
@@ -370,6 +391,8 @@ class BusinessSettingsModel extends Equatable {
         minDepositAmountCents,
         cancellationFeeCents,
         paymentsEnabled,
+        requireComplianceForms,
+        allowSameDayBooking,
         createdAt,
         updatedAt,
       ];
