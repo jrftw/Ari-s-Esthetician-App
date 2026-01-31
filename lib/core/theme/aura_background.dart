@@ -5,6 +5,11 @@
  * Last Modified: 2026-01-30
  * Dependencies: Flutter Material Design, app_colors, preferences_service (for wrapper)
  * Platform Compatibility: iOS, Android, Web
+ *
+ * Performance: Static layout only (no animations, no timers). Rebuilds only when
+ * theme/aura preferences change via ListenableBuilder. Uses RepaintBoundary so
+ * the background layer repaints independently from content above, avoiding extra
+ * repaints on scroll. All preference reads are sync from in-memory cache.
  */
 
 // MARK: - Imports
@@ -14,7 +19,7 @@ import '../../services/preferences_service.dart';
 
 // MARK: - Aura Background Widget
 /// Paints soft gradient orbs (auras) behind content to create a calm, spa-like atmosphere.
-/// Respects [enabled], [intensity] (low/medium/high), and [isDark] for theme-aware colors.
+/// Respects [enabled], [intensity], [colorThemeId], and [isDark] for customizable aura colors.
 class AuraBackground extends StatelessWidget {
   /// Optional: override base background color (defaults by theme).
   final Color? backgroundColor;
@@ -22,6 +27,8 @@ class AuraBackground extends StatelessWidget {
   final bool enabled;
   /// Intensity: "low" (0.4), "medium" (0.7), "high" (1.0). Ignored if [enabled] is false.
   final String intensity;
+  /// Aura color theme: "warm" | "cool" | "spa" | "sunset". Picks which palette to use.
+  final String colorThemeId;
   /// When true, uses dark theme aura colors and background.
   final bool isDark;
 
@@ -30,6 +37,7 @@ class AuraBackground extends StatelessWidget {
     this.backgroundColor,
     this.enabled = true,
     this.intensity = kAuraIntensityMedium,
+    this.colorThemeId = kAuraColorThemeWarm,
     this.isDark = false,
   });
 
@@ -48,6 +56,29 @@ class AuraBackground extends StatelessWidget {
   Color _baseColor() =>
       backgroundColor ?? (isDark ? AppColors.darkBackground : AppColors.backgroundCream);
 
+  /// Resolve the four orb colors from [colorThemeId] and [isDark].
+  ({Color orb1, Color orb2, Color orb3, Color orb4}) _resolveAuraColors() {
+    final d = isDark;
+    switch (colorThemeId) {
+      case kAuraColorThemeCool:
+        return d
+            ? (orb1: AppColors.darkAuraCoolBlue, orb2: AppColors.darkAuraCoolLightBlue, orb3: AppColors.darkAuraCoolTeal, orb4: AppColors.darkAuraCoolPurple)
+            : (orb1: AppColors.auraCoolBlue, orb2: AppColors.auraCoolLightBlue, orb3: AppColors.auraCoolTeal, orb4: AppColors.auraCoolPurple);
+      case kAuraColorThemeSpa:
+        return d
+            ? (orb1: AppColors.darkAuraSpaGreen, orb2: AppColors.darkAuraSpaMint, orb3: AppColors.darkAuraSpaLavender, orb4: AppColors.darkAuraSpaBlue)
+            : (orb1: AppColors.auraSpaGreen, orb2: AppColors.auraSpaMint, orb3: AppColors.auraSpaLavender, orb4: AppColors.auraSpaBlue);
+      case kAuraColorThemeSunset:
+        return d
+            ? (orb1: AppColors.darkAuraSunsetOrange, orb2: AppColors.darkAuraSunsetPink, orb3: AppColors.darkAuraSunsetYellow, orb4: AppColors.darkAuraSunsetCoral)
+            : (orb1: AppColors.auraSunsetOrange, orb2: AppColors.auraSunsetPink, orb3: AppColors.auraSunsetYellow, orb4: AppColors.auraSunsetCoral);
+      default:
+        return d
+            ? (orb1: AppColors.darkAuraGolden, orb2: AppColors.darkAuraCream, orb3: AppColors.darkAuraLavender, orb4: AppColors.darkAuraMutedGreen)
+            : (orb1: AppColors.auraGolden, orb2: AppColors.auraCream, orb3: AppColors.auraLavender, orb4: AppColors.auraMutedGreen);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -55,19 +86,7 @@ class AuraBackground extends StatelessWidget {
         final width = constraints.maxWidth;
         final height = constraints.maxHeight;
         final mult = enabled ? _intensityMultiplier : 0.0;
-        final colors = isDark
-            ? (
-                golden: AppColors.darkAuraGolden,
-                cream: AppColors.darkAuraCream,
-                lavender: AppColors.darkAuraLavender,
-                green: AppColors.darkAuraMutedGreen,
-              )
-            : (
-                golden: AppColors.auraGolden,
-                cream: AppColors.auraCream,
-                lavender: AppColors.auraLavender,
-                green: AppColors.auraMutedGreen,
-              );
+        final colors = _resolveAuraColors();
         return Stack(
           clipBehavior: Clip.none,
           children: [
@@ -82,28 +101,28 @@ class AuraBackground extends StatelessWidget {
                 left: width * 0.5,
                 top: -height * 0.15,
                 size: width * 0.9,
-                color: colors.golden,
+                color: colors.orb1,
                 intensityMult: mult,
               ),
               _buildAuraOrb(
                 left: -width * 0.3,
                 top: height * 0.4,
                 size: width * 0.85,
-                color: colors.cream,
+                color: colors.orb2,
                 intensityMult: mult,
               ),
               _buildAuraOrb(
                 left: width * 0.2,
                 top: height * 0.6,
                 size: width * 0.6,
-                color: colors.lavender,
+                color: colors.orb3,
                 intensityMult: mult,
               ),
               _buildAuraOrb(
                 left: -width * 0.2,
                 top: height * 0.05,
                 size: width * 0.5,
-                color: colors.green,
+                color: colors.orb4,
                 intensityMult: mult,
               ),
             ],
@@ -163,10 +182,14 @@ class AuraScreenWrapper extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        AuraBackground(
-          enabled: prefs.auraEnabledSync,
-          intensity: prefs.auraIntensitySync,
-          isDark: isDark,
+        // RepaintBoundary: aura layer repaints independently from overlay content (scroll, etc.)
+        RepaintBoundary(
+          child: AuraBackground(
+            enabled: prefs.auraEnabledSync,
+            intensity: prefs.auraIntensitySync,
+            colorThemeId: prefs.auraColorThemeSync,
+            isDark: isDark,
+          ),
         ),
         child,
       ],

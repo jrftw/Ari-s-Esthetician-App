@@ -120,6 +120,37 @@ class AppColors {
   static const Color darkAuraCream = Color(0x18FFF8E1);
   static const Color darkAuraLavender = Color(0x12E8EAF6);
   static const Color darkAuraMutedGreen = Color(0x158BC34A);
+
+  // MARK: - Aura Color Themes (Cool / Spa / Sunset) – light
+  /// Cool: blue, light blue, teal, purple
+  static const Color auraCoolBlue = Color(0x221E96F3);
+  static const Color auraCoolLightBlue = Color(0x1A90CAF9);
+  static const Color auraCoolTeal = Color(0x1A26A69A);
+  static const Color auraCoolPurple = Color(0x1A7E57C2);
+  /// Spa: green, mint, lavender, soft blue
+  static const Color auraSpaGreen = Color(0x228BC34A);
+  static const Color auraSpaMint = Color(0x1AA5D6A5);
+  static const Color auraSpaLavender = Color(0x1AE8EAF6);
+  static const Color auraSpaBlue = Color(0x1A64B5F6);
+  /// Sunset: orange, pink, soft yellow, coral
+  static const Color auraSunsetOrange = Color(0x28FF9800);
+  static const Color auraSunsetPink = Color(0x22F48FB1);
+  static const Color auraSunsetYellow = Color(0x22FFE082);
+  static const Color auraSunsetCoral = Color(0x22FFAB91);
+
+  // MARK: - Aura Color Themes (Cool / Spa / Sunset) – dark
+  static const Color darkAuraCoolBlue = Color(0x181E96F3);
+  static const Color darkAuraCoolLightBlue = Color(0x1290CAF9);
+  static const Color darkAuraCoolTeal = Color(0x1226A69A);
+  static const Color darkAuraCoolPurple = Color(0x127E57C2);
+  static const Color darkAuraSpaGreen = Color(0x158BC34A);
+  static const Color darkAuraSpaMint = Color(0x12A5D6A5);
+  static const Color darkAuraSpaLavender = Color(0x12E8EAF6);
+  static const Color darkAuraSpaBlue = Color(0x1264B5F6);
+  static const Color darkAuraSunsetOrange = Color(0x20FF9800);
+  static const Color darkAuraSunsetPink = Color(0x18F48FB1);
+  static const Color darkAuraSunsetYellow = Color(0x18FFE082);
+  static const Color darkAuraSunsetCoral = Color(0x18FFAB91);
 }
 
 // Suggestions For Features and Additions Later:

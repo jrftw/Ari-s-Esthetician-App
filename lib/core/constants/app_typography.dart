@@ -2,9 +2,13 @@
  * Filename: app_typography.dart
  * Purpose: Centralized typography system for consistent text styling
  * Author: Kevin Doyle Jr. / Infinitum Imagery LLC
- * Last Modified: 2024-01-XX
+ * Last Modified: 2026-01-30
  * Dependencies: Flutter Material Design
  * Platform Compatibility: iOS, Android, Web
+ *
+ * Text color: Base styles do NOT set color so text inherits from Theme. This
+ * keeps dark mode readable (light text on dark background) and light mode
+ * correct (dark text on light background) without hardcoding brown everywhere.
  */
 
 // MARK: - Imports
@@ -13,13 +17,12 @@ import 'app_colors.dart';
 
 // MARK: - Typography Constants
 /// Centralized text styles for the application
-/// All typography is defined here for consistency and easy customization
+/// Color is omitted so text uses theme's onSurface/onBackground (readable in light and dark)
 class AppTypography {
   AppTypography._(); // Private constructor to prevent instantiation
 
-  // MARK: - Base Text Style
+  // MARK: - Base Text Style (no color: inherits from Theme for dark/light readability)
   static const TextStyle _baseTextStyle = TextStyle(
-    color: AppColors.textPrimary,
     fontFamily: 'Sunflower',
     letterSpacing: 0.5,
   );
@@ -142,12 +145,11 @@ class AppTypography {
     letterSpacing: 0.5,
   );
 
-  // MARK: - Specialized Styles
+  // MARK: - Specialized Styles (no explicit color: inherit from Theme for dark mode)
   /// App bar title style
   static TextStyle get appBarTitle => _baseTextStyle.copyWith(
     fontSize: 20,
     fontWeight: FontWeight.w600,
-    color: AppColors.darkBrown,
   );
 
   /// Button text style
@@ -161,7 +163,6 @@ class AppTypography {
   static TextStyle get caption => _baseTextStyle.copyWith(
     fontSize: 12,
     fontWeight: FontWeight.normal,
-    color: AppColors.textSecondary,
     letterSpacing: 0.4,
   );
 
@@ -169,7 +170,6 @@ class AppTypography {
   static TextStyle get overline => _baseTextStyle.copyWith(
     fontSize: 10,
     fontWeight: FontWeight.normal,
-    color: AppColors.textSecondary,
     letterSpacing: 1.5,
   );
 }

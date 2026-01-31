@@ -167,6 +167,10 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
     _loadBusinessSettings().then((_) {
       // Generate time slots after settings are loaded
       _generateTimeSlots();
+      // If user already selected a date, refresh filtered slots with latest settings
+      if (mounted && _selectedDate != null) {
+        _filterAvailableTimeSlots();
+      }
     });
     _initializePayment();
     
@@ -468,6 +472,9 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
       
       final availableSlots = <TimeOfDay>[];
       
+      final now = DateTime.now();
+      final minSlotTime = now.add(const Duration(hours: AppConstants.minBookingAdvanceHours));
+      
       for (final timeSlot in dayTimeSlots) {
         // Create DateTime for this time slot
         final slotDateTime = DateTime(
@@ -477,6 +484,9 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
           timeSlot.hour,
           timeSlot.minute,
         );
+        
+        // Skip past slots: slot must start at or after minSlotTime
+        if (slotDateTime.isBefore(minSlotTime)) continue;
         
         // Calculate end time for all services
         final slotEndDateTime = slotDateTime.add(Duration(minutes: totalDurationMinutes));
@@ -519,17 +529,36 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
         if (!isWithinWorkingHours) continue;
         
         // Check if this time slot is available (not blocked by appointments or time-off)
-        final isAvailable = await _firestoreService.isTimeSlotAvailable(
-          slotDateTime,
-          slotEndDateTime,
-        );
+        // Per-slot try/catch so one Firestore error does not clear all slots
+        bool isAvailable = false;
+        try {
+          isAvailable = await _firestoreService.isTimeSlotAvailable(
+            slotDateTime,
+            slotEndDateTime,
+          );
+        } catch (slotError, slotStack) {
+          logError(
+            'Availability check failed for slot ${timeSlot.hour}:${timeSlot.minute.toString().padLeft(2, '0')}',
+            tag: 'ClientBookingScreen',
+            error: slotError,
+            stackTrace: slotStack,
+          );
+          // Treat as unavailable to avoid double-booking; other slots still get checked
+        }
         
         if (isAvailable) {
           availableSlots.add(timeSlot);
         }
       }
       
-      logSuccess('Filtered ${availableSlots.length} available time slots', tag: 'ClientBookingScreen');
+      if (availableSlots.isEmpty) {
+        logInfo(
+          'No available time slots for ${_selectedDate!.toString().substring(0, 10)} (dayOfWeek: $dayOfWeek, day had ${dayTimeSlots.length} candidate slots)',
+          tag: 'ClientBookingScreen',
+        );
+      } else {
+        logSuccess('Filtered ${availableSlots.length} available time slots', tag: 'ClientBookingScreen');
+      }
       
       setState(() {
         _filteredAvailableTimeSlots = availableSlots;

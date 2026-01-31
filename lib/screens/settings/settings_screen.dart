@@ -39,8 +39,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   User? _currentUser;
   bool _isChangelogExpanded = false;
   String _themeMode = kThemeModeSystem;
-  bool _auraEnabled = true;
+  bool _auraEnabled = false;
   String _auraIntensity = kAuraIntensityMedium;
+  String _auraColorTheme = kAuraColorThemeWarm;
 
   @override
   void initState() {
@@ -50,6 +51,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _themeMode = _prefs.themeModeSync;
     _auraEnabled = _prefs.auraEnabledSync;
     _auraIntensity = _prefs.auraIntensitySync;
+    _auraColorTheme = _prefs.auraColorThemeSync;
     
     // Listen to auth state changes
     _authService.authStateChanges.listen((user) {
@@ -69,6 +71,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _themeMode = _prefs.themeModeSync;
         _auraEnabled = _prefs.auraEnabledSync;
         _auraIntensity = _prefs.auraIntensitySync;
+        _auraColorTheme = _prefs.auraColorThemeSync;
       });
     }
   }
@@ -115,7 +118,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   // MARK: - Appearance Section
-  /// Build appearance section: theme mode (Light / Dark / Auto) and aura (on/off + intensity)
+  /// Build appearance section: theme mode (Light / Dark / Auto) and aura (on/off + intensity).
+  /// UI updates immediately (optimistic); persistence is async so the app never blocks on disk I/O.
   Widget _buildAppearanceSection() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? AppColors.darkTextPrimary : AppColors.darkBrown;
@@ -207,7 +211,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
               contentPadding: EdgeInsets.zero,
             ),
             if (_auraEnabled) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
+              Text(
+                'Aura color',
+                style: AppTypography.bodySmall.copyWith(color: secondaryColor),
+              ),
+              const SizedBox(height: 6),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment<String>(value: kAuraColorThemeWarm, label: Text('Warm')),
+                  ButtonSegment<String>(value: kAuraColorThemeCool, label: Text('Cool')),
+                  ButtonSegment<String>(value: kAuraColorThemeSpa, label: Text('Spa')),
+                  ButtonSegment<String>(value: kAuraColorThemeSunset, label: Text('Sunset')),
+                ],
+                selected: {_auraColorTheme},
+                onSelectionChanged: (Set<String> selected) {
+                  final value = selected.first;
+                  setState(() => _auraColorTheme = value);
+                  _prefs.setAuraColorTheme(value);
+                  logInfo('Aura color theme set to $value', tag: 'SettingsScreen');
+                },
+              ),
+              const SizedBox(height: 12),
               Text(
                 'Aura intensity',
                 style: AppTypography.bodySmall.copyWith(color: secondaryColor),

@@ -23,10 +23,21 @@ const String kAuraIntensityLow = 'low';
 const String kAuraIntensityMedium = 'medium';
 const String kAuraIntensityHigh = 'high';
 
+/// Stored aura color theme: "warm" | "cool" | "spa" | "sunset"
+const String kAuraColorThemeWarm = 'warm';
+const String kAuraColorThemeCool = 'cool';
+const String kAuraColorThemeSpa = 'spa';
+const String kAuraColorThemeSunset = 'sunset';
+
 // MARK: - Preferences Service
 /// Service for managing local user preferences
 /// Handles storage and retrieval of user settings like login, theme, and aura
 /// Notifies listeners when theme or aura settings change so UI can rebuild
+///
+/// Performance: Theme/aura values are read from in-memory cache (sync); disk I/O
+/// runs once at startup (ensureThemeAuraCache) and on each user change (async, so
+/// UI never blocks). Setters skip work when value unchanged; only affected
+/// listeners rebuild (main app for theme, shell for aura).
 class PreferencesService extends ChangeNotifier {
   static const String _keyRememberMe = 'remember_me';
   static const String _keyKeepSignedIn = 'keep_signed_in';
@@ -35,6 +46,7 @@ class PreferencesService extends ChangeNotifier {
   static const String _keyThemeMode = 'theme_mode';
   static const String _keyAuraEnabled = 'aura_enabled';
   static const String _keyAuraIntensity = 'aura_intensity';
+  static const String _keyAuraColorTheme = 'aura_color_theme';
 
   // MARK: - Singleton Pattern
   static PreferencesService? _instance;
@@ -46,50 +58,65 @@ class PreferencesService extends ChangeNotifier {
   PreferencesService._();
 
   // MARK: - Theme and Aura Cache (sync after ensureCache)
+  // Defaults: theme = Auto (system), aura = OFF. Any user change is persisted and notifies listeners.
   bool _themeAuraCacheLoaded = false;
+  SharedPreferences? _themeAuraPrefs; // Cached for theme/aura writes to avoid repeated getInstance()
   String _cachedThemeMode = kThemeModeSystem;
-  bool _cachedAuraEnabled = true;
+  bool _cachedAuraEnabled = false;
   String _cachedAuraIntensity = kAuraIntensityMedium;
+  String _cachedAuraColorTheme = kAuraColorThemeWarm;
 
   /// Load theme and aura prefs from disk; call once at app start (e.g. main app initState)
+  /// Defaults: theme Auto, aura OFF. Saved values override; changes via setters persist and update UI.
   Future<void> ensureThemeAuraCache() async {
     if (_themeAuraCacheLoaded) return;
     try {
       final prefs = await SharedPreferences.getInstance();
+      _themeAuraPrefs = prefs;
       _cachedThemeMode = prefs.getString(_keyThemeMode) ?? kThemeModeSystem;
-      _cachedAuraEnabled = prefs.getBool(_keyAuraEnabled) ?? true;
+      _cachedAuraEnabled = prefs.getBool(_keyAuraEnabled) ?? false;
       _cachedAuraIntensity = prefs.getString(_keyAuraIntensity) ?? kAuraIntensityMedium;
+      _cachedAuraColorTheme = prefs.getString(_keyAuraColorTheme) ?? kAuraColorThemeWarm;
       _themeAuraCacheLoaded = true;
-      AppLogger().logInfo('Theme/aura cache loaded: mode=$_cachedThemeMode aura=$_cachedAuraEnabled intensity=$_cachedAuraIntensity', tag: 'PreferencesService');
+      AppLogger().logInfo('Theme/aura cache loaded: mode=$_cachedThemeMode aura=$_cachedAuraEnabled intensity=$_cachedAuraIntensity colorTheme=$_cachedAuraColorTheme', tag: 'PreferencesService');
     } catch (e, stackTrace) {
       AppLogger().logError('Failed to load theme/aura cache', tag: 'PreferencesService', error: e, stackTrace: stackTrace);
     }
+  }
+
+  /// Use cached prefs for theme/aura writes, or fetch once (avoids getInstance() on every set)
+  Future<SharedPreferences> _themeAuraPrefsOrGet() async {
+    if (_themeAuraPrefs != null) return _themeAuraPrefs!;
+    final prefs = await SharedPreferences.getInstance();
+    _themeAuraPrefs = prefs;
+    return prefs;
   }
 
   /// Current theme mode (sync, use after ensureThemeAuraCache)
   String get themeModeSync => _cachedThemeMode;
   bool get auraEnabledSync => _cachedAuraEnabled;
   String get auraIntensitySync => _cachedAuraIntensity;
+  String get auraColorThemeSync => _cachedAuraColorTheme;
 
-  /// Set theme mode and persist; notifies listeners
+  /// Set theme mode and persist; notifies listeners (no-op if value unchanged)
   Future<void> setThemeMode(String value) async {
     if (_cachedThemeMode == value) return;
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await _themeAuraPrefsOrGet();
       await prefs.setString(_keyThemeMode, value);
       _cachedThemeMode = value;
-      notifyListeners();
+      notifyListeners(); // UI updates immediately; disk write already done
       AppLogger().logInfo('Theme mode saved: $value', tag: 'PreferencesService');
     } catch (e, stackTrace) {
       AppLogger().logError('Failed to save theme mode', tag: 'PreferencesService', error: e, stackTrace: stackTrace);
     }
   }
 
-  /// Set aura enabled and persist; notifies listeners
+  /// Set aura enabled and persist; notifies listeners (no-op if value unchanged)
   Future<void> setAuraEnabled(bool value) async {
     if (_cachedAuraEnabled == value) return;
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await _themeAuraPrefsOrGet();
       await prefs.setBool(_keyAuraEnabled, value);
       _cachedAuraEnabled = value;
       notifyListeners();
@@ -99,17 +126,31 @@ class PreferencesService extends ChangeNotifier {
     }
   }
 
-  /// Set aura intensity and persist; notifies listeners
+  /// Set aura intensity and persist; notifies listeners (no-op if value unchanged)
   Future<void> setAuraIntensity(String value) async {
     if (_cachedAuraIntensity == value) return;
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await _themeAuraPrefsOrGet();
       await prefs.setString(_keyAuraIntensity, value);
       _cachedAuraIntensity = value;
       notifyListeners();
       AppLogger().logInfo('Aura intensity saved: $value', tag: 'PreferencesService');
     } catch (e, stackTrace) {
       AppLogger().logError('Failed to save aura intensity', tag: 'PreferencesService', error: e, stackTrace: stackTrace);
+    }
+  }
+
+  /// Set aura color theme and persist; notifies listeners (no-op if value unchanged)
+  Future<void> setAuraColorTheme(String value) async {
+    if (_cachedAuraColorTheme == value) return;
+    try {
+      final prefs = await _themeAuraPrefsOrGet();
+      await prefs.setString(_keyAuraColorTheme, value);
+      _cachedAuraColorTheme = value;
+      notifyListeners();
+      AppLogger().logInfo('Aura color theme saved: $value', tag: 'PreferencesService');
+    } catch (e, stackTrace) {
+      AppLogger().logError('Failed to save aura color theme', tag: 'PreferencesService', error: e, stackTrace: stackTrace);
     }
   }
 

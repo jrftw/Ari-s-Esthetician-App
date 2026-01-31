@@ -47,20 +47,16 @@ service cloud.firestore {
     }
     
     // MARK: - Appointments Collection
-    /// Appointments - public create, admin read/write, authenticated users can read (for schedule view)
-    /// Note: Personal information filtering must be handled in app code when displaying to clients
+    /// Appointments - public create and read (for booking and availability)
+    /// Public read required so unauthenticated guests can check availability (overlap check).
+    /// Personal information must not be displayed to other clients in app code.
     match /appointments/{appointmentId} {
       // Allow public to create appointments (for booking)
       allow create: if true;
       
-      // Allow reading appointments if:
-      // 1. User is admin (full access)
-      // 2. User is authenticated (clients can see schedule - personal info filtered in app)
-      // 3. Appointment was created recently (within 1 hour) - for guest confirmation screen
-      allow read: if isAdmin() || 
-        isAuthenticated() ||
-        (resource.data.createdAt != null &&
-         resource.data.createdAt > request.time - duration.value(1, 'h'));
+      // Allow public read so availability check works for guest and signed-in clients.
+      // App only uses appointment times for overlap; no other client PII is shown.
+      allow read: if true;
       
       // Only admin can update/delete appointments
       allow update, delete: if isAdmin();
