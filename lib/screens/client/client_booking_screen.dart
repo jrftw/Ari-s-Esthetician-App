@@ -16,6 +16,7 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:flutter_datetime_picker_plus/flutter_datetime_picker_plus.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/theme_extensions.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/logging/app_logger.dart';
@@ -1091,8 +1092,6 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Book Appointment'),
-        backgroundColor: AppColors.sunflowerYellow,
-        foregroundColor: AppColors.darkBrown,
         elevation: 0,
         leading: _currentStep != BookingStep.serviceSelection
             ? IconButton(
@@ -1198,18 +1197,18 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                       onPressed: _isSubmitting ? null : _processPayment,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.sunflowerYellow,
-                        foregroundColor: AppColors.darkBrown,
+                        foregroundColor: Theme.of(context).colorScheme.onPrimary,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
                         ),
                       ),
                       child: _isSubmitting
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 20,
                               height: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(AppColors.darkBrown),
+                                valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.onPrimary),
                               ),
                             )
                           : Text(
@@ -1243,7 +1242,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                       onPressed: _isSubmitting ? null : _nextStep,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.sunflowerYellow,
-                        foregroundColor: AppColors.darkBrown,
+                        foregroundColor: Theme.of(context).colorScheme.onPrimary,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
                         ),
@@ -1283,7 +1282,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
         children: [
           Icon(
             Icons.admin_panel_settings,
-            color: AppColors.darkBrown,
+            color: context.themePrimaryTextColor,
             size: 20,
           ),
           const SizedBox(width: 12),
@@ -1291,7 +1290,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
             child: Text(
               'Viewing as Client',
               style: AppTypography.bodyMedium.copyWith(
-                color: AppColors.darkBrown,
+                color: context.themePrimaryTextColor,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -1305,7 +1304,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
             child: Text(
               'Back to Admin',
               style: AppTypography.bodyMedium.copyWith(
-                color: AppColors.darkBrown,
+                color: context.themePrimaryTextColor,
                 fontWeight: FontWeight.bold,
                 decoration: TextDecoration.underline,
               ),
@@ -1370,21 +1369,21 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                           shape: BoxShape.circle,
                           color: isActive
                               ? AppColors.sunflowerYellow
-                              : AppColors.textSecondary.withOpacity(0.2),
+                              : context.themeSecondaryTextColor.withValues(alpha: 0.2),
                         ),
                         child: Center(
                           child: isActive
                               ? Icon(
                                   Icons.check,
                                   size: 20,
-                                  color: AppColors.darkBrown,
+                                  color: context.themePrimaryTextColor,
                                 )
                               : Text(
                                   '${index + 1}',
                                   style: AppTypography.bodySmall.copyWith(
                                     color: isCurrent
-                                        ? AppColors.darkBrown
-                                        : AppColors.textSecondary,
+                                        ? context.themePrimaryTextColor
+                                        : context.themeSecondaryTextColor,
                                   ),
                                 ),
                         ),
@@ -1394,8 +1393,8 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                         step,
                         style: AppTypography.bodySmall.copyWith(
                           color: isActive
-                              ? AppColors.darkBrown
-                              : AppColors.textSecondary,
+                              ? context.themePrimaryTextColor
+                              : context.themeSecondaryTextColor,
                           fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
                         ),
                         textAlign: TextAlign.center,
@@ -1409,7 +1408,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                     width: 20,
                     color: isActive
                         ? AppColors.sunflowerYellow
-                        : AppColors.textSecondary.withOpacity(0.2),
+                        : context.themeSecondaryTextColor.withValues(alpha: 0.2),
                   ),
               ],
             ),
@@ -1439,20 +1438,20 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
             Icon(
               Icons.spa_outlined,
               size: 64,
-              color: AppColors.textSecondary,
+              color: context.themeSecondaryTextColor,
             ),
             const SizedBox(height: 16),
             Text(
               'No services available',
               style: AppTypography.titleMedium.copyWith(
-                color: AppColors.textSecondary,
+                color: context.themeSecondaryTextColor,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               'Please check back later',
               style: AppTypography.bodyMedium.copyWith(
-                color: AppColors.textSecondary,
+                color: context.themeSecondaryTextColor,
               ),
             ),
           ],
@@ -1466,7 +1465,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
         Text(
           'Select Service(s)',
           style: AppTypography.headlineSmall.copyWith(
-            color: AppColors.darkBrown,
+            color: context.themePrimaryTextColor,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -1474,7 +1473,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
         Text(
           'Choose one or more services to book',
           style: AppTypography.bodyMedium.copyWith(
-            color: AppColors.textSecondary,
+            color: context.themeSecondaryTextColor,
           ),
         ),
         const SizedBox(height: 24),
@@ -1530,7 +1529,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                 Text(
                   '${_selectedServices.length} service${_selectedServices.length > 1 ? 's' : ''} selected',
                   style: AppTypography.bodyMedium.copyWith(
-                    color: AppColors.darkBrown,
+                    color: context.themePrimaryTextColor,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -1549,20 +1548,20 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                   Icon(
                     Icons.search_off,
                     size: 64,
-                    color: AppColors.textSecondary,
+                    color: context.themeSecondaryTextColor,
                   ),
                   const SizedBox(height: 16),
                   Text(
                     'No services found',
                     style: AppTypography.titleMedium.copyWith(
-                      color: AppColors.textSecondary,
+                      color: context.themeSecondaryTextColor,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Try a different search term',
                     style: AppTypography.bodyMedium.copyWith(
-                      color: AppColors.textSecondary,
+                      color: context.themeSecondaryTextColor,
                     ),
                   ),
                 ],
@@ -1636,9 +1635,9 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                 }
               },
               selectedColor: AppColors.sunflowerYellow,
-              checkmarkColor: AppColors.darkBrown,
+              checkmarkColor: Theme.of(context).colorScheme.onPrimary,
               labelStyle: AppTypography.bodyMedium.copyWith(
-                color: isSelected ? AppColors.darkBrown : AppColors.textPrimary,
+                color: isSelected ? context.themePrimaryTextColor : context.themePrimaryTextColor,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
               ),
             ),
@@ -1692,7 +1691,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                   border: Border.all(
                     color: isSelected
                         ? AppColors.sunflowerYellow
-                        : AppColors.textSecondary,
+                        : context.themeSecondaryTextColor,
                     width: 2,
                   ),
                   color: isSelected
@@ -1703,7 +1702,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                     ? Icon(
                         Icons.check,
                         size: 16,
-                        color: AppColors.darkBrown,
+                        color: context.themePrimaryTextColor,
                       )
                     : null,
               ),
@@ -1717,7 +1716,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                     Text(
                       service.name,
                       style: AppTypography.titleMedium.copyWith(
-                        color: AppColors.darkBrown,
+                        color: context.themePrimaryTextColor,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -1730,20 +1729,20 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                         Icon(
                           Icons.access_time,
                           size: 16,
-                          color: AppColors.textSecondary,
+                          color: context.themeSecondaryTextColor,
                         ),
                         const SizedBox(width: 4),
                         Text(
                           '${service.durationMinutes} min',
                           style: AppTypography.bodySmall.copyWith(
-                            color: AppColors.textSecondary,
+                            color: context.themeSecondaryTextColor,
                           ),
                         ),
                         const SizedBox(width: 16),
                         Text(
                           service.formattedPrice,
                           style: AppTypography.titleSmall.copyWith(
-                            color: AppColors.darkBrown,
+                            color: context.themePrimaryTextColor,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -1770,7 +1769,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
           text: TextSpan(
             text: service.description,
             style: AppTypography.bodySmall.copyWith(
-              color: AppColors.textSecondary,
+              color: context.themeSecondaryTextColor,
             ),
           ),
           maxLines: 2,
@@ -1784,7 +1783,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
           return Text(
             service.description,
             style: AppTypography.bodySmall.copyWith(
-              color: AppColors.textSecondary,
+              color: context.themeSecondaryTextColor,
             ),
           );
         }
@@ -1796,7 +1795,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
             Text(
               service.description,
               style: AppTypography.bodySmall.copyWith(
-                color: AppColors.textSecondary,
+                color: context.themeSecondaryTextColor,
               ),
               maxLines: isExpanded ? null : 2,
               overflow: isExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
@@ -1837,7 +1836,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
         Text(
           'Select Date & Time',
           style: AppTypography.headlineSmall.copyWith(
-            color: AppColors.darkBrown,
+            color: context.themePrimaryTextColor,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -1845,7 +1844,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
         Text(
           'Choose your preferred appointment date and time',
           style: AppTypography.bodyMedium.copyWith(
-            color: AppColors.textSecondary,
+            color: context.themeSecondaryTextColor,
           ),
         ),
         const SizedBox(height: 24),
@@ -1899,7 +1898,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
               formatButtonVisible: false,
               titleCentered: true,
               titleTextStyle: AppTypography.titleMedium.copyWith(
-                color: AppColors.darkBrown,
+                color: context.themePrimaryTextColor,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -1919,7 +1918,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
           Text(
             'Select Time',
             style: AppTypography.titleMedium.copyWith(
-              color: AppColors.darkBrown,
+              color: context.themePrimaryTextColor,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -1983,8 +1982,8 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                     _formatTimeOfDay(time),
                     style: AppTypography.bodyMedium.copyWith(
                       color: isSelected
-                          ? AppColors.darkBrown
-                          : AppColors.textPrimary,
+                          ? context.themePrimaryTextColor
+                          : context.themePrimaryTextColor,
                       fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                     ),
                   ),
@@ -2008,7 +2007,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
           Text(
             'Your Information',
             style: AppTypography.headlineSmall.copyWith(
-              color: AppColors.darkBrown,
+              color: context.themePrimaryTextColor,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -2016,7 +2015,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
           Text(
             'Please provide your contact information',
             style: AppTypography.bodyMedium.copyWith(
-              color: AppColors.textSecondary,
+              color: context.themeSecondaryTextColor,
             ),
           ),
           const SizedBox(height: 24),
@@ -2158,7 +2157,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                 Text(
                   'Booking Summary',
                   style: AppTypography.titleMedium.copyWith(
-                    color: AppColors.darkBrown,
+                    color: context.themePrimaryTextColor,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -2173,7 +2172,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                       Text(
                         'Services (${_selectedServices.length})',
                         style: AppTypography.bodyMedium.copyWith(
-                          color: AppColors.textSecondary,
+                          color: context.themeSecondaryTextColor,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -2182,7 +2181,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                         child: Text(
                           '• ${service.name}',
                           style: AppTypography.bodySmall.copyWith(
-                            color: AppColors.darkBrown,
+                            color: context.themePrimaryTextColor,
                           ),
                         ),
                       )),
@@ -2241,7 +2240,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                           child: Text(
                             'Payment not required at this time. You can pay when you arrive.',
                             style: AppTypography.bodySmall.copyWith(
-                              color: AppColors.darkBrown,
+                              color: context.themePrimaryTextColor,
                             ),
                           ),
                         ),
@@ -2267,13 +2266,13 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
           Text(
             label,
             style: AppTypography.bodyMedium.copyWith(
-              color: AppColors.textSecondary,
+              color: context.themeSecondaryTextColor,
             ),
           ),
           Text(
             value,
             style: AppTypography.bodyMedium.copyWith(
-              color: AppColors.darkBrown,
+              color: context.themePrimaryTextColor,
               fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
             ),
           ),
@@ -2305,7 +2304,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
           Text(
             'Health & Skin Disclosure',
             style: AppTypography.titleLarge.copyWith(
-              color: AppColors.darkBrown,
+              color: context.themePrimaryTextColor,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -2313,7 +2312,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
           Text(
             'Please disclose any relevant health information to ensure safe treatment',
             style: AppTypography.bodySmall.copyWith(
-              color: AppColors.textSecondary,
+              color: context.themeSecondaryTextColor,
             ),
           ),
           const SizedBox(height: 16),
@@ -2376,13 +2375,13 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
       title: Text(
         label,
         style: AppTypography.bodyMedium.copyWith(
-          color: AppColors.darkBrown,
+          color: context.themePrimaryTextColor,
         ),
       ),
       value: value,
       onChanged: onChanged,
       activeColor: AppColors.sunflowerYellow,
-      checkColor: AppColors.darkBrown,
+      checkColor: Theme.of(context).colorScheme.onPrimary,
       contentPadding: EdgeInsets.zero,
     );
   }
@@ -2410,7 +2409,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
           Text(
             'Required Acknowledgments',
             style: AppTypography.titleLarge.copyWith(
-              color: AppColors.darkBrown,
+              color: context.themePrimaryTextColor,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -2418,7 +2417,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
           Text(
             'All acknowledgments must be accepted to proceed',
             style: AppTypography.bodySmall.copyWith(
-              color: AppColors.textSecondary,
+              color: context.themeSecondaryTextColor,
             ),
           ),
           const SizedBox(height: 16),
@@ -2456,14 +2455,14 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
       title: Text(
         label,
         style: AppTypography.bodyMedium.copyWith(
-          color: AppColors.darkBrown,
+          color: context.themePrimaryTextColor,
           fontWeight: FontWeight.w500,
         ),
       ),
       value: value,
       onChanged: onChanged,
       activeColor: AppColors.sunflowerYellow,
-      checkColor: AppColors.darkBrown,
+      checkColor: Theme.of(context).colorScheme.onPrimary,
       contentPadding: EdgeInsets.zero,
     );
   }
@@ -2497,7 +2496,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                 child: Text(
                   'Terms & Conditions',
                   style: AppTypography.titleLarge.copyWith(
-                    color: AppColors.darkBrown,
+                    color: context.themePrimaryTextColor,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -2525,7 +2524,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
             title: Text(
               TermsAndConditions.consentText,
               style: AppTypography.bodyMedium.copyWith(
-                color: AppColors.darkBrown,
+                color: context.themePrimaryTextColor,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -2536,7 +2535,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
               });
             },
             activeColor: AppColors.sunflowerYellow,
-            checkColor: AppColors.darkBrown,
+            checkColor: Theme.of(context).colorScheme.onPrimary,
             contentPadding: EdgeInsets.zero,
             controlAffinity: ListTileControlAffinity.leading,
           ),
@@ -2584,7 +2583,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                       child: Text(
                         'Terms & Conditions',
                         style: AppTypography.titleLarge.copyWith(
-                          color: AppColors.darkBrown,
+                          color: context.themePrimaryTextColor,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -2597,7 +2596,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                           _showTermsModal = false;
                         });
                       },
-                      color: AppColors.darkBrown,
+                      color: context.themePrimaryTextColor,
                     ),
                   ],
                 ),
@@ -2609,7 +2608,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                   child: Text(
                     TermsAndConditions.fullText,
                     style: AppTypography.bodyMedium.copyWith(
-                      color: AppColors.darkBrown,
+                      color: context.themePrimaryTextColor,
                       height: 1.5,
                     ),
                   ),
@@ -2635,7 +2634,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.sunflowerYellow,
-                      foregroundColor: AppColors.darkBrown,
+                      foregroundColor: Theme.of(context).colorScheme.onPrimary,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
                     child: Text(
@@ -2675,7 +2674,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
         title: Text(
           'I understand and agree to the cancellation and no-show policy',
           style: AppTypography.bodyMedium.copyWith(
-            color: AppColors.darkBrown,
+            color: context.themePrimaryTextColor,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -2693,7 +2692,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
           });
         },
         activeColor: AppColors.sunflowerYellow,
-        checkColor: AppColors.darkBrown,
+        checkColor: Theme.of(context).colorScheme.onPrimary,
         contentPadding: EdgeInsets.zero,
         controlAffinity: ListTileControlAffinity.leading,
       ),
@@ -2713,7 +2712,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
             Text(
               'Initializing Payment...',
               style: AppTypography.titleLarge.copyWith(
-                color: AppColors.darkBrown,
+                color: context.themePrimaryTextColor,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -2721,7 +2720,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
             Text(
               'Please wait while we set up your payment',
               style: AppTypography.bodyMedium.copyWith(
-                color: AppColors.textSecondary,
+                color: context.themeSecondaryTextColor,
               ),
             ),
           ],
@@ -2743,7 +2742,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
             Text(
               'Payment Not Available',
               style: AppTypography.titleLarge.copyWith(
-                color: AppColors.darkBrown,
+                color: context.themePrimaryTextColor,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -2751,7 +2750,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
             Text(
               'Unable to initialize payment. Please try again.',
               style: AppTypography.bodyMedium.copyWith(
-                color: AppColors.textSecondary,
+                color: context.themeSecondaryTextColor,
               ),
               textAlign: TextAlign.center,
             ),
@@ -2764,7 +2763,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.sunflowerYellow,
-                foregroundColor: AppColors.darkBrown,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
               ),
               child: const Text('Go Back'),
             ),
@@ -2788,7 +2787,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
           Text(
             'Payment Information',
             style: AppTypography.headlineSmall.copyWith(
-              color: AppColors.darkBrown,
+              color: context.themePrimaryTextColor,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -2796,7 +2795,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
           Text(
             'Please enter your payment details to complete your booking',
             style: AppTypography.bodyMedium.copyWith(
-              color: AppColors.textSecondary,
+              color: context.themeSecondaryTextColor,
             ),
           ),
           const SizedBox(height: 24),
@@ -2820,13 +2819,13 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                     Text(
                       'Deposit Required',
                       style: AppTypography.bodyMedium.copyWith(
-                        color: AppColors.textSecondary,
+                        color: context.themeSecondaryTextColor,
                       ),
                     ),
                     Text(
                       totalDeposit,
                       style: AppTypography.bodyMedium.copyWith(
-                        color: AppColors.darkBrown,
+                        color: context.themePrimaryTextColor,
                       ),
                     ),
                   ],
@@ -2839,13 +2838,13 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                       Text(
                         'Tip',
                         style: AppTypography.bodyMedium.copyWith(
-                          color: AppColors.textSecondary,
+                          color: context.themeSecondaryTextColor,
                         ),
                       ),
                       Text(
                         _paymentService.formatAmount(_tipAmountCents, AppConstants.stripeCurrency),
                         style: AppTypography.bodyMedium.copyWith(
-                          color: AppColors.darkBrown,
+                          color: context.themePrimaryTextColor,
                         ),
                       ),
                     ],
@@ -2858,14 +2857,14 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                     Text(
                       'Total Amount',
                       style: AppTypography.titleMedium.copyWith(
-                        color: AppColors.darkBrown,
+                        color: context.themePrimaryTextColor,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     Text(
                       _paymentService.formatAmount(totalDepositCents + _tipAmountCents, AppConstants.stripeCurrency),
                       style: AppTypography.titleLarge.copyWith(
-                        color: AppColors.darkBrown,
+                        color: context.themePrimaryTextColor,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -2880,7 +2879,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
           Text(
             'Add a Tip (Optional)',
             style: AppTypography.titleMedium.copyWith(
-              color: AppColors.darkBrown,
+              color: context.themePrimaryTextColor,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -2888,7 +2887,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
           Text(
             'Show your appreciation with a tip',
             style: AppTypography.bodySmall.copyWith(
-              color: AppColors.textSecondary,
+              color: context.themeSecondaryTextColor,
             ),
           ),
           const SizedBox(height: 16),
@@ -2927,8 +2926,8 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                     '\$${(tipCents / 100).toStringAsFixed(0)}',
                     style: AppTypography.bodyMedium.copyWith(
                       color: isSelected
-                          ? AppColors.darkBrown
-                          : AppColors.textPrimary,
+                          ? context.themePrimaryTextColor
+                          : context.themePrimaryTextColor,
                       fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                     ),
                   ),
@@ -3149,7 +3148,7 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                   child: Text(
                     'Your payment is secured by Stripe. We never store your card details.',
                     style: AppTypography.bodySmall.copyWith(
-                      color: AppColors.textSecondary,
+                      color: context.themeSecondaryTextColor,
                     ),
                   ),
                 ),

@@ -17,6 +17,7 @@ import '../../services/auth_service.dart';
 import '../../services/view_mode_service.dart';
 import '../../services/preferences_service.dart';
 import '../../core/logging/app_logger.dart';
+import '../../core/theme/theme_extensions.dart';
 
 // MARK: - Login Screen
 /// Screen for admin authentication
@@ -212,7 +213,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   Text(
                     'Sign In',
                     style: AppTypography.headlineLarge.copyWith(
-                      color: AppColors.darkBrown,
+                      color: context.themePrimaryTextColor,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -222,7 +223,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   Text(
                     'Sign in to your account',
                     style: AppTypography.bodyMedium.copyWith(
-                      color: AppColors.textSecondary,
+                      color: context.themeSecondaryTextColor,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -308,7 +309,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     contentPadding: EdgeInsets.zero,
                     controlAffinity: ListTileControlAffinity.leading,
                     activeColor: AppColors.sunflowerYellow,
-                    checkColor: AppColors.darkBrown,
+                    checkColor: Theme.of(context).colorScheme.onPrimary,
                   ),
                   
                   // MARK: - Keep Me Signed In Checkbox
@@ -330,7 +331,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     contentPadding: EdgeInsets.zero,
                     controlAffinity: ListTileControlAffinity.leading,
                     activeColor: AppColors.sunflowerYellow,
-                    checkColor: AppColors.darkBrown,
+                    checkColor: Theme.of(context).colorScheme.onPrimary,
                   ),
                   
                   const SizedBox(height: 24),
@@ -381,7 +382,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       Text(
                         'Version ${AppVersion.versionString}',
                         style: AppTypography.bodySmall.copyWith(
-                          color: AppColors.textSecondary,
+                          color: context.themeSecondaryTextColor,
                         ),
                         textAlign: TextAlign.center,
                       ),
@@ -389,7 +390,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       Text(
                         '© ${DateTime.now().year} Copyright Arianna DeAngelis\nAll rights reserved',
                         style: AppTypography.bodySmall.copyWith(
-                          color: AppColors.textSecondary,
+                          color: context.themeSecondaryTextColor,
                         ),
                         textAlign: TextAlign.center,
                       ),
@@ -397,7 +398,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       Text(
                         'Built in the USA 🇺🇸 with ❤️ by @jrftw',
                         style: AppTypography.bodySmall.copyWith(
-                          color: AppColors.textSecondary,
+                          color: context.themeSecondaryTextColor,
                         ),
                         textAlign: TextAlign.center,
                       ),

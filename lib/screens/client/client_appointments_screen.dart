@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/theme_extensions.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/logging/app_logger.dart';
@@ -101,8 +102,6 @@ class _ClientAppointmentsScreenState extends State<ClientAppointmentsScreen> wit
     return Scaffold(
       appBar: AppBar(
         title: const Text('My Appointments'),
-        backgroundColor: AppColors.sunflowerYellow,
-        foregroundColor: AppColors.darkBrown,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -123,9 +122,9 @@ class _ClientAppointmentsScreenState extends State<ClientAppointmentsScreen> wit
         ],
         bottom: TabBar(
           controller: _tabController,
-          labelColor: AppColors.darkBrown,
-          unselectedLabelColor: AppColors.textSecondary,
-          indicatorColor: AppColors.darkBrown,
+          labelColor: Theme.of(context).colorScheme.onSurface,
+          unselectedLabelColor: Theme.of(context).colorScheme.onSurfaceVariant,
+          indicatorColor: Theme.of(context).colorScheme.primary,
           tabs: const [
             Tab(text: 'Upcoming'),
             Tab(text: 'Past'),
@@ -176,7 +175,7 @@ class _ClientAppointmentsScreenState extends State<ClientAppointmentsScreen> wit
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.sunflowerYellow,
-                  foregroundColor: AppColors.darkBrown,
+                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
                 ),
                 child: const Text('Retry'),
               ),
@@ -196,13 +195,13 @@ class _ClientAppointmentsScreenState extends State<ClientAppointmentsScreen> wit
               Icon(
                 Icons.person_outline,
                 size: 64,
-                color: AppColors.textSecondary,
+                color: context.themeSecondaryTextColor,
               ),
               const SizedBox(height: 16),
               Text(
                 'Please log in to view your appointments',
                 style: AppTypography.titleMedium.copyWith(
-                  color: AppColors.textSecondary,
+                  color: context.themeSecondaryTextColor,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -275,20 +274,20 @@ class _ClientAppointmentsScreenState extends State<ClientAppointmentsScreen> wit
                   Icon(
                     Icons.calendar_today_outlined,
                     size: 64,
-                    color: AppColors.textSecondary,
+                    color: context.themeSecondaryTextColor,
                   ),
                   const SizedBox(height: 16),
                   Text(
                     'No Upcoming Appointments',
                     style: AppTypography.titleMedium.copyWith(
-                      color: AppColors.textSecondary,
+                      color: context.themeSecondaryTextColor,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Book your first appointment to get started',
                     style: AppTypography.bodyMedium.copyWith(
-                      color: AppColors.textSecondary,
+                      color: context.themeSecondaryTextColor,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -300,7 +299,7 @@ class _ClientAppointmentsScreenState extends State<ClientAppointmentsScreen> wit
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.sunflowerYellow,
-                      foregroundColor: AppColors.darkBrown,
+                      foregroundColor: Theme.of(context).colorScheme.onPrimary,
                       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                     ),
                     child: const Text('Book Appointment'),
@@ -376,20 +375,20 @@ class _ClientAppointmentsScreenState extends State<ClientAppointmentsScreen> wit
                   Icon(
                     Icons.history_outlined,
                     size: 64,
-                    color: AppColors.textSecondary,
+                    color: context.themeSecondaryTextColor,
                   ),
                   const SizedBox(height: 16),
                   Text(
                     'No Past Appointments',
                     style: AppTypography.titleMedium.copyWith(
-                      color: AppColors.textSecondary,
+                      color: context.themeSecondaryTextColor,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Your completed appointments will appear here',
                     style: AppTypography.bodyMedium.copyWith(
-                      color: AppColors.textSecondary,
+                      color: context.themeSecondaryTextColor,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -459,7 +458,7 @@ class _ClientAppointmentsScreenState extends State<ClientAppointmentsScreen> wit
                   Text(
                     _formatDate(appointment.startTime),
                     style: AppTypography.bodyMedium.copyWith(
-                      color: AppColors.textSecondary,
+                      color: context.themeSecondaryTextColor,
                     ),
                   ),
                 ],
@@ -469,7 +468,7 @@ class _ClientAppointmentsScreenState extends State<ClientAppointmentsScreen> wit
               Text(
                 serviceName,
                 style: AppTypography.titleMedium.copyWith(
-                  color: AppColors.darkBrown,
+                  color: context.themePrimaryTextColor,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -480,26 +479,26 @@ class _ClientAppointmentsScreenState extends State<ClientAppointmentsScreen> wit
                   Icon(
                     Icons.access_time,
                     size: 16,
-                    color: AppColors.textSecondary,
+                    color: context.themeSecondaryTextColor,
                   ),
                   const SizedBox(width: 4),
                   Text(
                     '${_formatTime(appointment.startTime)} - ${_formatTime(appointment.endTime)}',
                     style: AppTypography.bodyMedium.copyWith(
-                      color: AppColors.textSecondary,
+                      color: context.themeSecondaryTextColor,
                     ),
                   ),
                   const SizedBox(width: 16),
                   Icon(
                     Icons.timer_outlined,
                     size: 16,
-                    color: AppColors.textSecondary,
+                    color: context.themeSecondaryTextColor,
                   ),
                   const SizedBox(width: 4),
                   Text(
                     '${appointment.serviceSnapshot?.durationMinutes ?? 0} min',
                     style: AppTypography.bodyMedium.copyWith(
-                      color: AppColors.textSecondary,
+                      color: context.themeSecondaryTextColor,
                     ),
                   ),
                 ],
@@ -509,7 +508,7 @@ class _ClientAppointmentsScreenState extends State<ClientAppointmentsScreen> wit
                 Text(
                   'Notes: ${appointment.intakeNotes}',
                   style: AppTypography.bodySmall.copyWith(
-                    color: AppColors.textSecondary,
+                    color: context.themeSecondaryTextColor,
                     fontStyle: FontStyle.italic,
                   ),
                   maxLines: 2,
@@ -532,7 +531,7 @@ class _ClientAppointmentsScreenState extends State<ClientAppointmentsScreen> wit
         title: Text(
           appointment.serviceSnapshot?.name ?? 'Appointment Details',
           style: AppTypography.titleLarge.copyWith(
-            color: AppColors.darkBrown,
+            color: context.themePrimaryTextColor,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -557,7 +556,7 @@ class _ClientAppointmentsScreenState extends State<ClientAppointmentsScreen> wit
             child: Text(
               'Close',
               style: AppTypography.bodyMedium.copyWith(
-                color: AppColors.darkBrown,
+                color: context.themePrimaryTextColor,
               ),
             ),
           ),
@@ -578,7 +577,7 @@ class _ClientAppointmentsScreenState extends State<ClientAppointmentsScreen> wit
             child: Text(
               '$label:',
               style: AppTypography.bodyMedium.copyWith(
-                color: AppColors.textSecondary,
+                color: context.themeSecondaryTextColor,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -587,7 +586,7 @@ class _ClientAppointmentsScreenState extends State<ClientAppointmentsScreen> wit
             child: Text(
               value,
               style: AppTypography.bodyMedium.copyWith(
-                color: AppColors.darkBrown,
+                color: context.themePrimaryTextColor,
               ),
             ),
           ),

@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/theme_extensions.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/logging/app_logger.dart';
@@ -46,8 +47,6 @@ class _AdminCategoryManagementScreenState extends State<AdminCategoryManagementS
     return Scaffold(
       appBar: AppBar(
         title: const Text('Category Management'),
-        backgroundColor: AppColors.sunflowerYellow,
-        foregroundColor: AppColors.darkBrown,
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
@@ -63,7 +62,7 @@ class _AdminCategoryManagementScreenState extends State<AdminCategoryManagementS
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showCategoryFormDialog(context),
         backgroundColor: AppColors.sunflowerYellow,
-        foregroundColor: AppColors.darkBrown,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
         child: const Icon(Icons.add),
       ),
     );
@@ -135,10 +134,10 @@ class _AdminCategoryManagementScreenState extends State<AdminCategoryManagementS
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(
+                Icon(
                   Icons.category_outlined,
                   size: 64,
-                  color: AppColors.textSecondary,
+                  color: context.themeSecondaryTextColor,
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -149,7 +148,7 @@ class _AdminCategoryManagementScreenState extends State<AdminCategoryManagementS
                 Text(
                   'Tap the + button to add your first category',
                   style: AppTypography.bodyMedium.copyWith(
-                    color: AppColors.textSecondary,
+                    color: context.themeSecondaryTextColor,
                   ),
                 ),
               ],
@@ -234,7 +233,7 @@ class _AdminCategoryManagementScreenState extends State<AdminCategoryManagementS
                         Text(
                           'Sort Order: ${category.sortOrder}',
                           style: AppTypography.bodySmall.copyWith(
-                            color: AppColors.textSecondary,
+                            color: context.themeSecondaryTextColor,
                           ),
                         ),
                       ],
@@ -252,7 +251,7 @@ class _AdminCategoryManagementScreenState extends State<AdminCategoryManagementS
                     icon: Icon(
                       category.isActive ? Icons.visibility_off : Icons.visibility,
                       color: category.isActive
-                          ? AppColors.textSecondary
+                          ? context.themeSecondaryTextColor
                           : AppColors.sunflowerYellow,
                     ),
                     onPressed: () => _toggleCategoryStatus(category),

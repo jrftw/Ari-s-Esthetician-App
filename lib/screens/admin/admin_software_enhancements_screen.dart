@@ -8,12 +8,14 @@
  */
 
 // MARK: - Imports
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/theme_extensions.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/logging/app_logger.dart';
@@ -45,11 +47,21 @@ class _AdminSoftwareEnhancementsScreenState extends State<AdminSoftwareEnhanceme
   EnhancementType? _filterType;
   EnhancementStatus? _filterStatus;
 
+  /// Enhancements stream subscription; cancelled in dispose.
+  StreamSubscription<List<SoftwareEnhancementModel>>? _enhancementsSubscription;
+
   @override
   void initState() {
     super.initState();
     logUI('AdminSoftwareEnhancementsScreen initState called', tag: 'AdminSoftwareEnhancementsScreen');
     _loadEnhancements();
+  }
+
+  @override
+  void dispose() {
+    _enhancementsSubscription?.cancel();
+    _enhancementsSubscription = null;
+    super.dispose();
   }
 
   // MARK: - Data Loading
@@ -64,7 +76,7 @@ class _AdminSoftwareEnhancementsScreenState extends State<AdminSoftwareEnhanceme
     try {
       // Load enhancements stream for real-time updates
       final stream = _firestoreService.getSoftwareEnhancementsStream();
-      stream.listen(
+      _enhancementsSubscription = stream.listen(
         (enhancements) {
           logSuccess('Loaded ${enhancements.length} enhancements', tag: 'AdminSoftwareEnhancementsScreen');
           if (mounted) {
@@ -250,7 +262,7 @@ class _AdminSoftwareEnhancementsScreenState extends State<AdminSoftwareEnhanceme
       floatingActionButton: FloatingActionButton(
         onPressed: _createEnhancement,
         backgroundColor: AppColors.sunflowerYellow,
-        foregroundColor: AppColors.darkBrown,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
         child: const Icon(Icons.add),
       ),
     );
@@ -266,7 +278,7 @@ class _AdminSoftwareEnhancementsScreenState extends State<AdminSoftwareEnhanceme
           Text(
             'Filter by Type:',
             style: AppTypography.bodySmall.copyWith(
-              color: AppColors.textSecondary,
+              color: context.themeSecondaryTextColor,
             ),
           ),
           const SizedBox(height: 8),
@@ -297,7 +309,7 @@ class _AdminSoftwareEnhancementsScreenState extends State<AdminSoftwareEnhanceme
           Text(
             'Filter by Status:',
             style: AppTypography.bodySmall.copyWith(
-              color: AppColors.textSecondary,
+              color: context.themeSecondaryTextColor,
             ),
           ),
           const SizedBox(height: 8),
@@ -340,7 +352,7 @@ class _AdminSoftwareEnhancementsScreenState extends State<AdminSoftwareEnhanceme
       selected: selected,
       onSelected: onSelected,
       selectedColor: AppColors.sunflowerYellow.withOpacity(0.3),
-      checkmarkColor: AppColors.darkBrown,
+      checkmarkColor: Theme.of(context).colorScheme.onPrimary,
     );
   }
 
@@ -378,7 +390,7 @@ class _AdminSoftwareEnhancementsScreenState extends State<AdminSoftwareEnhanceme
               onPressed: _loadEnhancements,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.sunflowerYellow,
-                foregroundColor: AppColors.darkBrown,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
               ),
               child: const Text('Retry'),
             ),
@@ -397,7 +409,7 @@ class _AdminSoftwareEnhancementsScreenState extends State<AdminSoftwareEnhanceme
             Icon(
               Icons.bug_report_outlined,
               size: 64,
-              color: AppColors.textSecondary,
+              color: context.themeSecondaryTextColor,
             ),
             const SizedBox(height: 16),
             Text(
@@ -549,26 +561,26 @@ class _AdminSoftwareEnhancementsScreenState extends State<AdminSoftwareEnhanceme
                   Icon(
                     Icons.person,
                     size: 14,
-                    color: AppColors.textSecondary,
+                    color: context.themeSecondaryTextColor,
                   ),
                   const SizedBox(width: 4),
                   Text(
                     'Created by ${enhancement.createdByName}',
                     style: AppTypography.bodySmall.copyWith(
-                      color: AppColors.textSecondary,
+                      color: context.themeSecondaryTextColor,
                     ),
                   ),
                   const SizedBox(width: 16),
                   Icon(
                     Icons.access_time,
                     size: 14,
-                    color: AppColors.textSecondary,
+                    color: context.themeSecondaryTextColor,
                   ),
                   const SizedBox(width: 4),
                   Text(
                     _formatDateTime(enhancement.createdAt),
                     style: AppTypography.bodySmall.copyWith(
-                      color: AppColors.textSecondary,
+                      color: context.themeSecondaryTextColor,
                     ),
                   ),
                 ],
@@ -580,13 +592,13 @@ class _AdminSoftwareEnhancementsScreenState extends State<AdminSoftwareEnhanceme
                     Icon(
                       Icons.update,
                       size: 14,
-                      color: AppColors.textSecondary,
+                      color: context.themeSecondaryTextColor,
                     ),
                     const SizedBox(width: 4),
                     Text(
                       'Updated by ${enhancement.updatedByName ?? "Unknown"} on ${_formatDateTime(enhancement.updatedAt!)}',
                       style: AppTypography.bodySmall.copyWith(
-                        color: AppColors.textSecondary,
+                        color: context.themeSecondaryTextColor,
                       ),
                     ),
                   ],
@@ -640,7 +652,7 @@ class _AdminSoftwareEnhancementsScreenState extends State<AdminSoftwareEnhanceme
       case EnhancementType.suggestion:
         return AppColors.sunflowerYellow;
       case EnhancementType.improvement:
-        return AppColors.darkBrown;
+        return context.themePrimaryTextColor;
     }
   }
 
@@ -654,7 +666,7 @@ class _AdminSoftwareEnhancementsScreenState extends State<AdminSoftwareEnhanceme
       case EnhancementStatus.completed:
         return AppColors.successGreen;
       case EnhancementStatus.deferred:
-        return AppColors.textSecondary;
+        return context.themeSecondaryTextColor;
       case EnhancementStatus.rejected:
         return AppColors.errorRed;
     }
@@ -959,7 +971,7 @@ class _EnhancementDialogState extends State<_EnhancementDialog> {
           },
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.sunflowerYellow,
-            foregroundColor: AppColors.darkBrown,
+            foregroundColor: Theme.of(context).colorScheme.onPrimary,
           ),
           child: const Text('Save'),
         ),
@@ -1012,9 +1024,9 @@ class _EnhancementDetailsDialog extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildDetailRow('Type', _getTypeLabel(enhancement.type)),
-            _buildDetailRow('Status', _getStatusLabel(enhancement.status)),
-            _buildDetailRow('Priority', '${enhancement.priority}/5'),
+            _buildDetailRow(context, 'Type', _getTypeLabel(enhancement.type)),
+            _buildDetailRow(context, 'Status', _getStatusLabel(enhancement.status)),
+            _buildDetailRow(context, 'Priority', '${enhancement.priority}/5'),
             const SizedBox(height: 16),
             Text(
               'Description',
@@ -1044,11 +1056,11 @@ class _EnhancementDetailsDialog extends StatelessWidget {
             const SizedBox(height: 16),
             const Divider(),
             const SizedBox(height: 8),
-            _buildDetailRow('Created by', enhancement.createdByName),
-            _buildDetailRow('Created at', _formatDateTime(enhancement.createdAt)),
+            _buildDetailRow(context, 'Created by', enhancement.createdByName),
+            _buildDetailRow(context, 'Created at', _formatDateTime(enhancement.createdAt)),
             if (enhancement.updatedAt != null) ...[
-              _buildDetailRow('Updated by', enhancement.updatedByName ?? 'Unknown'),
-              _buildDetailRow('Updated at', _formatDateTime(enhancement.updatedAt!)),
+              _buildDetailRow(context, 'Updated by', enhancement.updatedByName ?? 'Unknown'),
+              _buildDetailRow(context, 'Updated at', _formatDateTime(enhancement.updatedAt!)),
             ],
           ],
         ),
@@ -1062,7 +1074,7 @@ class _EnhancementDetailsDialog extends StatelessWidget {
     );
   }
 
-  Widget _buildDetailRow(String label, String value) {
+  Widget _buildDetailRow(BuildContext context, String label, String value) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -1074,7 +1086,7 @@ class _EnhancementDetailsDialog extends StatelessWidget {
               label,
               style: AppTypography.bodySmall.copyWith(
                 fontWeight: FontWeight.bold,
-                color: AppColors.textSecondary,
+                color: context.themeSecondaryTextColor,
               ),
             ),
           ),

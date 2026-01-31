@@ -149,7 +149,9 @@ class _ArisEstheticianAppState extends State<ArisEstheticianApp> {
   VersionCheckResult? _versionCheckResult;
   bool _versionCheckComplete = false;
   final VersionCheckService _versionCheckService = VersionCheckService();
-  String _themeMode = kThemeModeSystem;
+
+  /// Single router instance per app lifecycle; created lazily and disposed in dispose() to avoid auth subscription leak.
+  AppRouter? _appRouter;
 
   @override
   void initState() {
@@ -161,11 +163,9 @@ class _ArisEstheticianAppState extends State<ArisEstheticianApp> {
     logDebug('Firebase initialized: ${widget.firebaseInitialized}', tag: 'ArisEstheticianApp');
     
     // MARK: - Theme and Aura Preferences
-    /// Load theme/aura cache and listen for changes so theme mode and aura update app-wide
+    /// Load aura cache only; theme is forced to light mode for now
     PreferencesService.instance.ensureThemeAuraCache().then((_) {
-      if (mounted) {
-        setState(() => _themeMode = PreferencesService.instance.themeModeSync);
-      }
+      if (mounted) setState(() {});
     });
     PreferencesService.instance.addListener(_onPreferencesChanged);
     
@@ -181,23 +181,19 @@ class _ArisEstheticianAppState extends State<ArisEstheticianApp> {
   }
 
   void _onPreferencesChanged() {
-    if (mounted) {
-      setState(() => _themeMode = PreferencesService.instance.themeModeSync);
-    }
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    _appRouter?.dispose();
+    _appRouter = null;
     PreferencesService.instance.removeListener(_onPreferencesChanged);
     super.dispose();
   }
 
-  /// Resolve ThemeMode from stored string and (for system) platform brightness
-  ThemeMode get _resolvedThemeMode {
-    if (_themeMode == kThemeModeDark) return ThemeMode.dark;
-    if (_themeMode == kThemeModeLight) return ThemeMode.light;
-    return ThemeMode.system;
-  }
+  /// Theme is forced to light only for now (dark and auto disabled)
+  ThemeMode get _resolvedThemeMode => ThemeMode.light;
 
   // MARK: - Version Check Method
   /// Check app version against latest required version
@@ -248,7 +244,7 @@ class _ArisEstheticianAppState extends State<ArisEstheticianApp> {
           _versionCheckResult = VersionCheckResult(
             updateRequired: false,
             currentVersion: '1.0.0',
-            currentBuildNumber: 1,
+            currentBuildNumber: 3,
             error: e.toString(),
           );
           _versionCheckComplete = true;
@@ -316,7 +312,7 @@ class _ArisEstheticianAppState extends State<ArisEstheticianApp> {
           currentVersion: _versionCheckResult!.currentVersion,
           currentBuildNumber: _versionCheckResult!.currentBuildNumber,
           latestVersion: _versionCheckResult!.latestVersion ?? '1.0.0',
-          latestBuildNumber: _versionCheckResult!.latestBuildNumber ?? 1,
+          latestBuildNumber: _versionCheckResult!.latestBuildNumber ?? 3,
           updateMessage: _versionCheckResult!.updateMessage,
           updateUrl: _versionCheckResult!.updateUrl,
         ),
@@ -329,7 +325,8 @@ class _ArisEstheticianAppState extends State<ArisEstheticianApp> {
     print('🔍 Creating AppRouter instance...');
     logRouter('Creating AppRouter instance', tag: 'ArisEstheticianApp');
     try {
-      final router = AppRouter().router;
+      _appRouter ??= AppRouter();
+      final router = _appRouter!.router;
       diagnostics.recordCheck(
         checkKey: 'router',
         displayName: AriDiagnosticCheckNames.appRouter,
@@ -344,9 +341,8 @@ class _ArisEstheticianAppState extends State<ArisEstheticianApp> {
         title: 'Ari\'s Esthetician App',
         debugShowCheckedModeBanner: false,
         
-        // MARK: - Theme Configuration
+        // MARK: - Theme Configuration (light only for now; dark and auto disabled)
         theme: AppTheme.lightTheme,
-        darkTheme: AppTheme.darkTheme,
         themeMode: _resolvedThemeMode,
 
         // MARK: - Router Configuration

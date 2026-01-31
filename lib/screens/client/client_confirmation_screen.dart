@@ -14,6 +14,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/theme_extensions.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/logging/app_logger.dart';
@@ -106,8 +107,6 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Booking Confirmed'),
-        backgroundColor: AppColors.sunflowerYellow,
-        foregroundColor: AppColors.darkBrown,
         elevation: 0,
         automaticallyImplyLeading: false,
       ),
@@ -141,7 +140,7 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
             Text(
               _errorMessage ?? 'Something went wrong',
               style: AppTypography.titleMedium.copyWith(
-                color: AppColors.darkBrown,
+                color: context.themePrimaryTextColor,
               ),
               textAlign: TextAlign.center,
             ),
@@ -150,7 +149,7 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
               onPressed: () => context.go(AppConstants.routeClientBooking),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.sunflowerYellow,
-                foregroundColor: AppColors.darkBrown,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
               ),
               child: const Text('Back to Booking'),
             ),
@@ -181,10 +180,10 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
                 color: AppColors.sunflowerYellow,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.check,
                 size: 48,
-                color: AppColors.darkBrown,
+                color: context.themePrimaryTextColor,
               ),
             ),
           ),
@@ -195,7 +194,7 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
             child: Text(
               'Booking Confirmed!',
               style: AppTypography.headlineMedium.copyWith(
-                color: AppColors.darkBrown,
+                color: context.themePrimaryTextColor,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -205,7 +204,7 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
             child: Text(
               'Your appointment has been successfully booked',
               style: AppTypography.bodyMedium.copyWith(
-                color: AppColors.textSecondary,
+                color: context.themeSecondaryTextColor,
               ),
               textAlign: TextAlign.center,
             ),
@@ -233,7 +232,7 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
                 Text(
                   'Appointment Details',
                   style: AppTypography.titleLarge.copyWith(
-                    color: AppColors.darkBrown,
+                    color: context.themePrimaryTextColor,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -313,13 +312,13 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
                             Text(
                               'Deposit Paid',
                               style: AppTypography.bodyMedium.copyWith(
-                                color: AppColors.textSecondary,
+                                color: context.themeSecondaryTextColor,
                               ),
                             ),
                             Text(
                               appointment.formattedDeposit,
                               style: AppTypography.bodyMedium.copyWith(
-                                color: AppColors.darkBrown,
+                                color: context.themePrimaryTextColor,
                               ),
                             ),
                           ],
@@ -332,13 +331,13 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
                               Text(
                                 'Tip (Pre-appointment)',
                                 style: AppTypography.bodyMedium.copyWith(
-                                  color: AppColors.textSecondary,
+                                  color: context.themeSecondaryTextColor,
                                 ),
                               ),
                               Text(
                                 appointment.formattedPreTip,
                                 style: AppTypography.bodyMedium.copyWith(
-                                  color: AppColors.darkBrown,
+                                  color: context.themePrimaryTextColor,
                                 ),
                               ),
                             ],
@@ -352,13 +351,13 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
                               Text(
                                 'Tip (Post-appointment)',
                                 style: AppTypography.bodyMedium.copyWith(
-                                  color: AppColors.textSecondary,
+                                  color: context.themeSecondaryTextColor,
                                 ),
                               ),
                               Text(
                                 appointment.formattedPostTip,
                                 style: AppTypography.bodyMedium.copyWith(
-                                  color: AppColors.darkBrown,
+                                  color: context.themePrimaryTextColor,
                                 ),
                               ),
                             ],
@@ -371,14 +370,14 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
                             Text(
                               'Total Paid',
                               style: AppTypography.titleMedium.copyWith(
-                                color: AppColors.darkBrown,
+                                color: context.themePrimaryTextColor,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                             Text(
                               '\$${((appointment.depositAmountCents + appointment.totalTipAmountCents) / 100).toStringAsFixed(2)}',
                               style: AppTypography.titleMedium.copyWith(
-                                color: AppColors.darkBrown,
+                                color: context.themePrimaryTextColor,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -406,13 +405,13 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
                             Text(
                               'Service Price',
                               style: AppTypography.bodyMedium.copyWith(
-                                color: AppColors.textSecondary,
+                                color: context.themeSecondaryTextColor,
                               ),
                             ),
                             Text(
                               appointment.formattedDeposit,
                               style: AppTypography.bodyMedium.copyWith(
-                                color: AppColors.darkBrown,
+                                color: context.themePrimaryTextColor,
                               ),
                             ),
                           ],
@@ -430,7 +429,7 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
                               child: Text(
                                 'Payment not required at this time. You can pay when you arrive.',
                                 style: AppTypography.bodySmall.copyWith(
-                                  color: AppColors.darkBrown,
+                                  color: context.themePrimaryTextColor,
                                 ),
                               ),
                             ),
@@ -470,7 +469,7 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
                     Text(
                       'What\'s Next?',
                       style: AppTypography.titleMedium.copyWith(
-                        color: AppColors.darkBrown,
+                        color: context.themePrimaryTextColor,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -482,7 +481,7 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
                   '• A reminder will be sent 24 hours before your appointment\n'
                   '• Please arrive 10 minutes early for your appointment',
                   style: AppTypography.bodyMedium.copyWith(
-                    color: AppColors.textPrimary,
+                    color: context.themePrimaryTextColor,
                   ),
                 ),
               ],
@@ -498,7 +497,7 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
               child: OutlinedButton.icon(
                 onPressed: () => _showAddTipDialog(),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.darkBrown,
+                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
                   side: BorderSide(color: AppColors.sunflowerYellow, width: 2),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
@@ -526,7 +525,7 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
               onPressed: () => context.go(AppConstants.routeClientBooking),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.sunflowerYellow,
-                foregroundColor: AppColors.darkBrown,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
                 ),
@@ -546,7 +545,7 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
             child: OutlinedButton(
               onPressed: () => context.go(AppConstants.routeWelcome),
               style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.darkBrown,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
                 side: BorderSide(color: AppColors.sunflowerYellow, width: 2),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
@@ -578,7 +577,7 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
         Icon(
           icon,
           size: 20,
-          color: AppColors.textSecondary,
+          color: context.themeSecondaryTextColor,
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -588,14 +587,14 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
               Text(
                 label,
                 style: AppTypography.bodySmall.copyWith(
-                  color: AppColors.textSecondary,
+                  color: context.themeSecondaryTextColor,
                 ),
               ),
               const SizedBox(height: 4),
               Text(
                 value,
                 style: AppTypography.bodyMedium.copyWith(
-                  color: AppColors.darkBrown,
+                  color: context.themePrimaryTextColor,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -620,7 +619,7 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
         title: Text(
           'Add a Tip',
           style: AppTypography.titleLarge.copyWith(
-            color: AppColors.darkBrown,
+            color: context.themePrimaryTextColor,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -634,7 +633,7 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
                 Text(
                   'Show your appreciation with a tip',
                   style: AppTypography.bodyMedium.copyWith(
-                    color: AppColors.textSecondary,
+                    color: context.themeSecondaryTextColor,
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -670,8 +669,8 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
                           '\$${(tipCents / 100).toStringAsFixed(0)}',
                           style: AppTypography.bodyMedium.copyWith(
                             color: isSelected
-                                ? AppColors.darkBrown
-                                : AppColors.textPrimary,
+                                ? context.themePrimaryTextColor
+                                : context.themePrimaryTextColor,
                             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                           ),
                         ),
@@ -724,7 +723,7 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
                 Text(
                   'Payment Information',
                   style: AppTypography.titleSmall.copyWith(
-                    color: AppColors.darkBrown,
+                    color: context.themePrimaryTextColor,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -879,7 +878,7 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
             child: Text(
               'Cancel',
               style: AppTypography.bodyMedium.copyWith(
-                color: AppColors.textSecondary,
+                color: context.themeSecondaryTextColor,
               ),
             ),
           ),
@@ -887,15 +886,15 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
             onPressed: _isProcessingTip ? null : () => _processPostAppointmentTip(),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.sunflowerYellow,
-              foregroundColor: AppColors.darkBrown,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
             ),
             child: _isProcessingTip
-                ? const SizedBox(
+                ? SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(AppColors.darkBrown),
+                      valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.onPrimary),
                     ),
                   )
                 : Text(

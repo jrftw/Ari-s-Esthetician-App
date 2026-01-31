@@ -12,6 +12,7 @@ import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/constants/app_colors.dart';
+import '../core/theme/theme_extensions.dart';
 import '../core/constants/app_typography.dart';
 import '../core/constants/app_constants.dart';
 import '../core/logging/app_logger.dart';
@@ -85,7 +86,7 @@ class UpdateRequiredScreen extends StatelessWidget {
                 Text(
                   'Update Required',
                   style: AppTypography.headlineLarge.copyWith(
-                    color: AppColors.darkBrown,
+                    color: context.themePrimaryTextColor,
                     fontWeight: FontWeight.bold,
                   ),
                   textAlign: TextAlign.center,
@@ -99,7 +100,7 @@ class UpdateRequiredScreen extends StatelessWidget {
                   updateMessage ?? 
                     'A new version of ${AppConstants.appName} is available. Please update to continue using the app.',
                   style: AppTypography.bodyLarge.copyWith(
-                    color: AppColors.textSecondary,
+                    color: context.themeSecondaryTextColor,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -127,13 +128,13 @@ class UpdateRequiredScreen extends StatelessWidget {
                           Text(
                             'Current Version:',
                             style: AppTypography.bodyMedium.copyWith(
-                              color: AppColors.textSecondary,
+                              color: context.themeSecondaryTextColor,
                             ),
                           ),
                           Text(
                             '$currentVersion (Build $currentBuildNumber)',
                             style: AppTypography.bodyMedium.copyWith(
-                              color: AppColors.textPrimary,
+                              color: context.themePrimaryTextColor,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -157,7 +158,7 @@ class UpdateRequiredScreen extends StatelessWidget {
                           Text(
                             'Latest Version:',
                             style: AppTypography.bodyMedium.copyWith(
-                              color: AppColors.textSecondary,
+                              color: context.themeSecondaryTextColor,
                             ),
                           ),
                           Text(
@@ -184,7 +185,7 @@ class UpdateRequiredScreen extends StatelessWidget {
                     onPressed: () => _handleUpdateButtonPressed(context),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.sunflowerYellow,
-                      foregroundColor: AppColors.darkBrown,
+                      foregroundColor: Theme.of(context).colorScheme.onPrimary,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
                       ),
@@ -193,7 +194,7 @@ class UpdateRequiredScreen extends StatelessWidget {
                     child: Text(
                       _getUpdateButtonText(),
                       style: AppTypography.buttonText.copyWith(
-                        color: AppColors.darkBrown,
+                        color: context.themePrimaryTextColor,
                       ),
                     ),
                   ),
@@ -206,7 +207,7 @@ class UpdateRequiredScreen extends StatelessWidget {
                 Text(
                   _getHelpText(),
                   style: AppTypography.bodySmall.copyWith(
-                    color: AppColors.textSecondary,
+                    color: context.themeSecondaryTextColor,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -326,7 +327,7 @@ class UpdateRequiredScreen extends StatelessWidget {
         title: Text(
           'Refresh Required',
           style: AppTypography.titleLarge.copyWith(
-            color: AppColors.darkBrown,
+            color: context.themePrimaryTextColor,
           ),
         ),
         content: Column(
@@ -336,14 +337,14 @@ class UpdateRequiredScreen extends StatelessWidget {
             Text(
               'Please refresh the page to load the latest version.',
               style: AppTypography.bodyMedium.copyWith(
-                color: AppColors.textPrimary,
+                color: context.themePrimaryTextColor,
               ),
             ),
             const SizedBox(height: 16),
             Text(
               'You can:',
               style: AppTypography.bodyMedium.copyWith(
-                color: AppColors.textPrimary,
+                color: context.themePrimaryTextColor,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -353,7 +354,7 @@ class UpdateRequiredScreen extends StatelessWidget {
               '• Press Cmd+R (Mac)\n'
               '• Click the refresh button in your browser',
               style: AppTypography.bodySmall.copyWith(
-                color: AppColors.textSecondary,
+                color: context.themeSecondaryTextColor,
               ),
             ),
           ],
@@ -455,13 +456,13 @@ class UpdateRequiredScreen extends StatelessWidget {
         title: Text(
           'Update Required',
           style: AppTypography.titleLarge.copyWith(
-            color: AppColors.darkBrown,
+            color: context.themePrimaryTextColor,
           ),
         ),
         content: Text(
           message,
           style: AppTypography.bodyMedium.copyWith(
-            color: AppColors.textPrimary,
+            color: context.themePrimaryTextColor,
           ),
         ),
         actions: [

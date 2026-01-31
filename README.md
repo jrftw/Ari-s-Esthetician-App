@@ -548,9 +548,17 @@ For support, questions, or issues:
 
 ## 📝 Changelog
 
-### Version 1.0.0 (January 22, 2026)
+### Version 1.0.0 (Build 3 - January 30, 2026)
 
-**Initial Release**
+**Build 3**
+- Version display shows commit hash when deployed (next to version)
+- Build number 3; changelog updated for Build 1, 2, and 3
+- Deploy script passes git short commit hash into build
+
+**Build 2** (January 22, 2026)
+- Build number 2; version management updates
+
+**Build 1 – Initial Release** (January 22, 2026)
 - ✅ Core Flutter project structure
 - ✅ Firebase integration (Auth, Firestore, Functions, Storage)
 - ✅ Data models (Service, Appointment, Client, BusinessSettings)

@@ -8,6 +8,7 @@
  */
 
 // MARK: - Imports
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -17,6 +18,7 @@ import '../../core/constants/app_version.dart';
 import '../../core/logging/app_logger.dart';
 import '../../services/auth_service.dart';
 import '../../services/preferences_service.dart';
+import '../../core/theme/theme_extensions.dart';
 
 // MARK: - Settings Screen
 /// General settings screen accessible to all users
@@ -38,23 +40,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isLoggingOut = false;
   User? _currentUser;
   bool _isChangelogExpanded = false;
-  String _themeMode = kThemeModeSystem;
+  // Theme forced to light only for now (dark and auto disabled)
   bool _auraEnabled = false;
   String _auraIntensity = kAuraIntensityMedium;
   String _auraColorTheme = kAuraColorThemeWarm;
+
+  /// Auth state subscription; cancelled in dispose to prevent leak and setState-after-dispose.
+  StreamSubscription<User?>? _authStateSubscription;
 
   @override
   void initState() {
     super.initState();
     logUI('SettingsScreen initState called', tag: 'SettingsScreen');
     _currentUser = _authService.currentUser;
-    _themeMode = _prefs.themeModeSync;
     _auraEnabled = _prefs.auraEnabledSync;
     _auraIntensity = _prefs.auraIntensitySync;
     _auraColorTheme = _prefs.auraColorThemeSync;
     
-    // Listen to auth state changes
-    _authService.authStateChanges.listen((user) {
+    // Listen to auth state changes; store subscription so it can be cancelled in dispose
+    _authStateSubscription = _authService.authStateChanges.listen((user) {
       if (mounted) {
         setState(() {
           _currentUser = user;
@@ -68,7 +72,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _onPreferencesChanged() {
     if (mounted) {
       setState(() {
-        _themeMode = _prefs.themeModeSync;
         _auraEnabled = _prefs.auraEnabledSync;
         _auraIntensity = _prefs.auraIntensitySync;
         _auraColorTheme = _prefs.auraColorThemeSync;
@@ -78,6 +81,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
+    _authStateSubscription?.cancel();
+    _authStateSubscription = null;
     _prefs.removeListener(_onPreferencesChanged);
     super.dispose();
   }
@@ -90,8 +95,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Settings'),
-        backgroundColor: AppColors.sunflowerYellow,
-        foregroundColor: AppColors.darkBrown,
         elevation: 0,
       ),
       body: SafeArea(
@@ -118,12 +121,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   // MARK: - Appearance Section
-  /// Build appearance section: theme mode (Light / Dark / Auto) and aura (on/off + intensity).
-  /// UI updates immediately (optimistic); persistence is async so the app never blocks on disk I/O.
+  /// Build appearance section: theme (light only for now) and aura (on/off + intensity).
+  /// Dark and Auto theme options are disabled; everyone uses light mode.
   Widget _buildAppearanceSection() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? AppColors.darkTextPrimary : AppColors.darkBrown;
-    final secondaryColor = isDark ? AppColors.darkTextSecondary : AppColors.textSecondary;
+    final textColor = context.themePrimaryTextColor;
+    final secondaryColor = context.themeSecondaryTextColor;
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       child: Padding(
@@ -135,7 +137,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 Icon(
                   Icons.palette_outlined,
-                  color: AppColors.sunflowerYellow,
+                  color: Theme.of(context).colorScheme.primary,
                   size: 24,
                 ),
                 const SizedBox(width: 8),
@@ -146,7 +148,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
             const SizedBox(height: 16),
-            // MARK: - Theme Mode
+            // MARK: - Theme (Light Only)
             Text(
               'Theme',
               style: AppTypography.titleSmall.copyWith(
@@ -155,31 +157,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            SegmentedButton<String>(
-              segments: const [
-                ButtonSegment<String>(
-                  value: kThemeModeLight,
-                  icon: Icon(Icons.light_mode, size: 20),
-                  label: Text('Light'),
-                ),
-                ButtonSegment<String>(
-                  value: kThemeModeDark,
-                  icon: Icon(Icons.dark_mode, size: 20),
-                  label: Text('Dark'),
-                ),
-                ButtonSegment<String>(
-                  value: kThemeModeSystem,
-                  icon: Icon(Icons.brightness_auto, size: 20),
-                  label: Text('Auto'),
-                ),
-              ],
-              selected: {_themeMode},
-              onSelectionChanged: (Set<String> selected) {
-                final value = selected.first;
-                setState(() => _themeMode = value);
-                _prefs.setThemeMode(value);
-                logInfo('Theme mode set to $value', tag: 'SettingsScreen');
-              },
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.light_mode, size: 20, color: secondaryColor),
+              title: Text(
+                'Light',
+                style: AppTypography.bodyMedium.copyWith(color: textColor),
+              ),
+              subtitle: Text(
+                'Dark and Auto are disabled for now.',
+                style: AppTypography.bodySmall.copyWith(color: secondaryColor),
+              ),
             ),
             const SizedBox(height: 20),
             // MARK: - Aura
@@ -206,8 +194,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 'Soft glowing orbs behind screens',
                 style: AppTypography.bodySmall.copyWith(color: secondaryColor),
               ),
-              activeThumbColor: AppColors.sunflowerYellow,
-              activeTrackColor: AppColors.sunflowerYellow.withValues(alpha: 0.5),
+              activeThumbColor: Theme.of(context).colorScheme.primary,
+              activeTrackColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
               contentPadding: EdgeInsets.zero,
             ),
             if (_auraEnabled) ...[
@@ -262,6 +250,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // MARK: - User Info Section
   /// Build user information section
   Widget _buildUserInfoSection() {
+    final primaryColor = context.themePrimaryTextColor;
+    final secondaryColor = context.themeSecondaryTextColor;
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       child: Padding(
@@ -269,11 +259,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Row(
           children: [
             CircleAvatar(
-              backgroundColor: AppColors.sunflowerYellow,
+              backgroundColor: Theme.of(context).colorScheme.primary,
               radius: 24,
               child: Icon(
                 Icons.person,
-                color: AppColors.darkBrown,
+                color: Theme.of(context).colorScheme.onPrimary,
                 size: 24,
               ),
             ),
@@ -284,14 +274,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   Text(
                     _currentUser?.email ?? 'User',
-                    style: AppTypography.titleMedium,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(color: primaryColor),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     'Signed in',
-                    style: AppTypography.bodySmall.copyWith(
-                      color: AppColors.darkBrown.withOpacity(0.6),
-                    ),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: secondaryColor),
                   ),
                 ],
               ),
@@ -327,7 +315,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   Icon(
                     Icons.history,
-                    color: AppColors.sunflowerYellow,
+                    color: Theme.of(context).colorScheme.primary,
                     size: 24,
                   ),
                   const SizedBox(width: 8),
@@ -341,7 +329,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _isChangelogExpanded
                         ? Icons.expand_less
                         : Icons.expand_more,
-                    color: AppColors.darkBrown,
+                    color: context.themePrimaryTextColor,
                   ),
                 ],
               ),
@@ -362,14 +350,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   // MARK: - Changelog Content
-  /// Build changelog content from CHANGELOG.md
+  /// Build changelog content aligned with CHANGELOG.md (Build 1, 2, 3)
   Widget _buildChangelogContent() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Version 1.0.0
+        // Build 3 - 2026-01-30
         _buildChangelogVersion(
-          version: '1.0.0',
+          version: '${AppVersion.version} (Build ${AppVersion.buildNumber})',
+          date: '2026-01-30',
+          items: [
+            'Version display now shows commit hash when deployed (next to version)',
+            'Build number updated to 3',
+            'Changelog updated for Build 1, 2, and 3',
+          ],
+        ),
+        const SizedBox(height: 20),
+        // Build 2 - 2026-01-22
+        _buildChangelogVersion(
+          version: '1.0.0 (Build 2)',
+          date: '2026-01-22',
+          items: [
+            'Updated build number to 2',
+            'Version management system updated',
+          ],
+        ),
+        const SizedBox(height: 20),
+        // Build 1 - 2026-01-22
+        _buildChangelogVersion(
+          version: '1.0.0 (Build 1)',
           date: '2026-01-22',
           items: [
             'Initial release of Ari\'s Esthetician App',
@@ -409,9 +418,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       children: [
         Text(
           'Version $version - $date',
-          style: AppTypography.titleMedium.copyWith(
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.bold,
-            color: AppColors.sunflowerYellow,
+            color: Theme.of(context).colorScheme.primary,
           ),
         ),
         const SizedBox(height: 8),
@@ -422,14 +431,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   Text(
                     '• ',
-                    style: AppTypography.bodyMedium.copyWith(
-                      color: AppColors.sunflowerYellow,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.primary,
                     ),
                   ),
                   Expanded(
                     child: Text(
                       item,
-                      style: AppTypography.bodyMedium,
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ),
                 ],
@@ -445,7 +454,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.softCream,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -453,15 +462,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           Text(
             'About This Changelog',
-            style: AppTypography.titleSmall.copyWith(
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
               fontWeight: FontWeight.bold,
+              color: context.themePrimaryTextColor,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             'This changelog follows the Keep a Changelog format and Semantic Versioning. '
             'Versions follow SemVer: MAJOR.MINOR.PATCH',
-            style: AppTypography.bodySmall,
+            style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
       ),
@@ -482,13 +492,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 Icon(
                   Icons.logout,
-                  color: AppColors.errorRed,
+                  color: Theme.of(context).colorScheme.error,
                   size: 24,
                 ),
                 const SizedBox(width: 8),
                 Text(
                   'Account',
-                  style: AppTypography.titleLarge,
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
               ],
             ),
@@ -499,8 +509,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: ElevatedButton(
                 onPressed: _isLoggingOut ? null : _handleLogout,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.errorRed,
-                  foregroundColor: Colors.white,
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                  foregroundColor: Theme.of(context).colorScheme.onError,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -530,7 +540,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 24),
             // MARK: - Version Information
             Divider(
-              color: AppColors.textSecondary.withOpacity(0.2),
+              color: context.themeSecondaryTextColor.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 16),
             Row(
@@ -539,13 +549,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Icon(
                   Icons.info_outline,
                   size: 16,
-                  color: AppColors.textSecondary,
+                  color: context.themeSecondaryTextColor,
                 ),
                 const SizedBox(width: 8),
                 Text(
                   'App Version',
-                  style: AppTypography.bodySmall.copyWith(
-                    color: AppColors.textSecondary,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: context.themeSecondaryTextColor,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -554,32 +564,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 8),
             Text(
               'Version: ${AppVersion.version}',
-              style: AppTypography.bodySmall.copyWith(
-                color: AppColors.textSecondary,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: context.themeSecondaryTextColor,
               ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 4),
             Text(
               'Build: ${AppVersion.buildNumberString}',
-              style: AppTypography.bodySmall.copyWith(
-                color: AppColors.textSecondary,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: context.themeSecondaryTextColor,
               ),
               textAlign: TextAlign.center,
             ),
+            if (AppVersion.hasCommitHash) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Commit: ${AppVersion.commitHash}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: context.themeSecondaryTextColor,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
             const SizedBox(height: 4),
             Text(
               'Environment: ${AppVersion.environmentString.toUpperCase()}',
-              style: AppTypography.bodySmall.copyWith(
-                color: AppColors.textSecondary,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: context.themeSecondaryTextColor,
               ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               AppVersion.versionString,
-              style: AppTypography.bodySmall.copyWith(
-                color: AppColors.sunflowerYellow,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.primary,
                 fontWeight: FontWeight.w500,
               ),
               textAlign: TextAlign.center,
@@ -609,7 +629,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: TextButton.styleFrom(
-              foregroundColor: AppColors.errorRed,
+              foregroundColor: Theme.of(context).colorScheme.error,
             ),
             child: const Text('Logout'),
           ),

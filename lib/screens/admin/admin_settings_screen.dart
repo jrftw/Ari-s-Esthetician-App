@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/theme_extensions.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/logging/app_logger.dart';
@@ -522,7 +523,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
             Text(
               'Leave empty to allow any deposit amount (including \$0.00)',
               style: AppTypography.bodySmall.copyWith(
-                color: AppColors.textSecondary,
+                color: context.themeSecondaryTextColor,
               ),
             ),
             const SizedBox(height: 16),
@@ -547,7 +548,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
             Text(
               'Leave empty to disable cancellation fees',
               style: AppTypography.bodySmall.copyWith(
-                color: AppColors.textSecondary,
+                color: context.themeSecondaryTextColor,
               ),
             ),
             const SizedBox(height: 16),
@@ -618,7 +619,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                       ? 'Payments are enabled. Clients will be required to pay during booking.'
                       : 'Payments are disabled. Clients can book without payment. Pricing will still be shown.',
                   style: AppTypography.bodySmall.copyWith(
-                    color: AppColors.textSecondary,
+                    color: context.themeSecondaryTextColor,
                   ),
                 ),
                 value: _paymentsEnabled,
@@ -630,7 +631,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                 activeColor: AppColors.sunflowerYellow,
                 secondary: Icon(
                   _paymentsEnabled ? Icons.payment : Icons.payment_outlined,
-                  color: _paymentsEnabled ? AppColors.sunflowerYellow : AppColors.textSecondary,
+                  color: _paymentsEnabled ? Theme.of(context).colorScheme.primary : context.themeSecondaryTextColor,
                 ),
               ),
               const SizedBox(height: 16),
@@ -644,7 +645,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
               Text(
                 'Required if payments are enabled',
                 style: AppTypography.bodySmall.copyWith(
-                  color: AppColors.textSecondary,
+                  color: context.themeSecondaryTextColor,
                 ),
               ),
               const SizedBox(height: 16),
@@ -659,7 +660,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
               Text(
                 'Required if payments are enabled. Store securely in Cloud Functions.',
                 style: AppTypography.bodySmall.copyWith(
-                  color: AppColors.textSecondary,
+                  color: context.themeSecondaryTextColor,
                 ),
               ),
               const SizedBox(height: 32),
@@ -729,7 +730,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         Text(
           'Set your weekly working hours. You can add multiple time slots per day (e.g., 9am-12pm and 1pm-5pm).',
           style: AppTypography.bodyMedium.copyWith(
-            color: AppColors.textSecondary,
+            color: context.themeSecondaryTextColor,
           ),
         ),
         const SizedBox(height: 16),
@@ -781,13 +782,13 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                     ? 'No time slots set'
                     : _formatTimeSlots(timeSlots),
                 style: AppTypography.bodySmall.copyWith(
-                  color: AppColors.textSecondary,
+                  color: context.themeSecondaryTextColor,
                 ),
               )
             : Text(
                 'Closed',
                 style: AppTypography.bodySmall.copyWith(
-                  color: AppColors.textSecondary,
+                  color: context.themeSecondaryTextColor,
                 ),
               ),
         children: isOpen
@@ -817,7 +818,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                         label: const Text('Add Time Slot'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.sunflowerYellow,
-                          foregroundColor: AppColors.darkBrown,
+                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
                         ),
                       ),
                     ],

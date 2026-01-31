@@ -36,7 +36,6 @@ import '../../screens/welcome/welcome_screen.dart';
 import '../../screens/welcome/account_choice_screen.dart';
 import '../../screens/settings/settings_screen.dart';
 import '../theme/aura_background.dart';
-import '../../services/preferences_service.dart';
 
 // MARK: - Auth State Notifier
 /// Notifier that listens to Firebase Auth state changes
@@ -94,10 +93,16 @@ class _AuthStateNotifier extends ChangeNotifier {
 // MARK: - Router Configuration
 /// Application router with role-based routing
 /// Handles navigation between client and admin screens
+/// Call dispose() when app is disposed so auth subscription is cancelled (single instance per app).
 class AppRouter {
   final AuthService _authService = AuthService();
   final PreferencesService _preferencesService = PreferencesService.instance;
   final _AuthStateNotifier _authStateNotifier = _AuthStateNotifier();
+
+  /// Release auth state listener. Call from app State.dispose() when using a single AppRouter instance.
+  void dispose() {
+    _authStateNotifier.dispose();
+  }
 
   /// Get the configured GoRouter instance
   GoRouter get router {

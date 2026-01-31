@@ -8,6 +8,7 @@
  */
 
 // MARK: - Imports
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
@@ -34,11 +35,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   int _unreadNotificationsCount = 0;
   bool _isSuperAdmin = false;
 
+  /// Unread count stream subscription; cancelled in dispose to prevent leak.
+  StreamSubscription<int>? _unreadCountSubscription;
+
   @override
   void initState() {
     super.initState();
     _loadUnreadCount();
     _checkSuperAdmin();
+  }
+
+  @override
+  void dispose() {
+    _unreadCountSubscription?.cancel();
+    _unreadCountSubscription = null;
+    super.dispose();
   }
 
   /// Check if current user is super admin
@@ -63,7 +74,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   /// Load unread notifications count with real-time updates
   void _loadUnreadCount() {
     final stream = _notificationService.getUnreadNotificationsCountStream();
-    stream.listen(
+    _unreadCountSubscription = stream.listen(
       (count) {
         if (mounted) {
           setState(() {

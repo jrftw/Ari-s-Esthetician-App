@@ -8,12 +8,14 @@
  */
 
 // MARK: - Imports
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/theme_extensions.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/logging/app_logger.dart';
@@ -65,6 +67,9 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
   // MARK: - Selected Appointment
   AppointmentModel? _selectedAppointment;
 
+  /// Appointments stream subscription; cancelled in dispose to prevent leak and limit Firestore reads.
+  StreamSubscription<List<AppointmentModel>>? _appointmentsSubscription;
+
   @override
   void initState() {
     super.initState();
@@ -73,8 +78,15 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
     _loadAppointments();
   }
 
+  @override
+  void dispose() {
+    _appointmentsSubscription?.cancel();
+    _appointmentsSubscription = null;
+    super.dispose();
+  }
+
   // MARK: - Data Loading
-  /// Load appointments from Firestore with real-time updates
+  /// Load appointments from Firestore with real-time updates (date-bounded to reduce reads).
   void _loadAppointments() {
     logLoading('Loading appointments...', tag: 'AdminAppointmentsScreen');
     setState(() {
@@ -83,8 +95,11 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
     });
 
     try {
-      final stream = _firestoreService.getAppointmentsStream();
-      stream.listen(
+      final stream = _firestoreService.getAppointmentsStream(
+        startDate: _firstDay,
+        endDate: _lastDay,
+      );
+      _appointmentsSubscription = stream.listen(
         (appointments) {
           logSuccess('Loaded ${appointments.length} appointments', tag: 'AdminAppointmentsScreen');
           if (mounted) {
@@ -274,8 +289,6 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Appointments'),
-        backgroundColor: AppColors.sunflowerYellow,
-        foregroundColor: AppColors.darkBrown,
         elevation: 0,
         actions: [
           // View Mode Toggle
@@ -451,7 +464,7 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
             onPressed: _loadAppointments,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.sunflowerYellow,
-              foregroundColor: AppColors.darkBrown,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
             ),
             child: const Text('Retry'),
           ),
@@ -471,13 +484,13 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
             Icon(
               Icons.calendar_today_outlined,
               size: 64,
-              color: AppColors.textSecondary,
+              color: context.themeSecondaryTextColor,
             ),
             const SizedBox(height: 16),
             Text(
               'No appointments found',
               style: AppTypography.titleMedium.copyWith(
-                color: AppColors.textSecondary,
+                color: context.themeSecondaryTextColor,
               ),
             ),
             const SizedBox(height: 8),
@@ -486,7 +499,7 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
                   ? 'Try adjusting your filters'
                   : 'Create a new appointment to get started',
               style: AppTypography.bodyMedium.copyWith(
-                color: AppColors.textSecondary,
+                color: context.themeSecondaryTextColor,
               ),
             ),
           ],
@@ -562,7 +575,7 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
               formatButtonVisible: false,
               titleCentered: true,
               titleTextStyle: AppTypography.titleMedium.copyWith(
-                color: AppColors.darkBrown,
+                color: context.themePrimaryTextColor,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -588,7 +601,7 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
         child: Text(
           'No appointments on ${_formatDate(_selectedCalendarDate)}',
           style: AppTypography.bodyMedium.copyWith(
-            color: AppColors.textSecondary,
+            color: context.themeSecondaryTextColor,
           ),
         ),
       );
@@ -644,7 +657,7 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
                   Text(
                     _formatTime(appointment.startTime),
                     style: AppTypography.titleMedium.copyWith(
-                      color: AppColors.darkBrown,
+                      color: context.themePrimaryTextColor,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -655,7 +668,7 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
               Text(
                 appointment.clientFullName,
                 style: AppTypography.titleMedium.copyWith(
-                  color: AppColors.darkBrown,
+                  color: context.themePrimaryTextColor,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -665,20 +678,20 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
                 Text(
                   appointment.serviceSnapshot!.name,
                   style: AppTypography.bodyMedium.copyWith(
-                    color: AppColors.textSecondary,
+                    color: context.themeSecondaryTextColor,
                   ),
                 ),
               const SizedBox(height: 8),
               // Contact Info
               Row(
                 children: [
-                  Icon(Icons.email_outlined, size: 16, color: AppColors.textSecondary),
+                  Icon(Icons.email_outlined, size: 16, color: context.themeSecondaryTextColor),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
                       appointment.clientEmail,
                       style: AppTypography.bodySmall.copyWith(
-                        color: AppColors.textSecondary,
+                        color: context.themeSecondaryTextColor,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -688,12 +701,12 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
               const SizedBox(height: 4),
               Row(
                 children: [
-                  Icon(Icons.phone_outlined, size: 16, color: AppColors.textSecondary),
+                  Icon(Icons.phone_outlined, size: 16, color: context.themeSecondaryTextColor),
                   const SizedBox(width: 4),
                   Text(
                     appointment.clientPhone,
                     style: AppTypography.bodySmall.copyWith(
-                      color: AppColors.textSecondary,
+                      color: context.themeSecondaryTextColor,
                     ),
                   ),
                 ],
@@ -855,7 +868,7 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.sunflowerYellow,
-                foregroundColor: AppColors.darkBrown,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
               ),
               child: const Text('Apply'),
             ),
@@ -918,7 +931,7 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
                       child: Text(
                         'Appointment Details',
                         style: AppTypography.headlineSmall.copyWith(
-                          color: AppColors.darkBrown,
+                          color: context.themePrimaryTextColor,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -1004,7 +1017,7 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
                       onPressed: () => Navigator.of(context).pop(),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.sunflowerYellow,
-                        foregroundColor: AppColors.darkBrown,
+                        foregroundColor: Theme.of(context).colorScheme.onPrimary,
                       ),
                       child: const Text('Close'),
                     ),
@@ -1095,7 +1108,7 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
                           child: Text(
                             'Create New Appointment',
                             style: AppTypography.titleLarge.copyWith(
-                              color: AppColors.darkBrown,
+                              color: context.themePrimaryTextColor,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -1103,7 +1116,7 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
                         IconButton(
                           icon: const Icon(Icons.close),
                           onPressed: isCreating ? null : () => Navigator.of(context).pop(),
-                          color: AppColors.darkBrown,
+                          color: context.themePrimaryTextColor,
                         ),
                       ],
                     ),
@@ -1123,7 +1136,7 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
                                   'Service *',
                                   style: AppTypography.titleSmall.copyWith(
                                     fontWeight: FontWeight.bold,
-                                    color: AppColors.darkBrown,
+                                    color: context.themePrimaryTextColor,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -1192,7 +1205,7 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
                                     'Select Client *',
                                     style: AppTypography.titleSmall.copyWith(
                                       fontWeight: FontWeight.bold,
-                                      color: AppColors.darkBrown,
+                                      color: context.themePrimaryTextColor,
                                     ),
                                   ),
                                   const SizedBox(height: 8),
@@ -1236,7 +1249,7 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
                                   'Client Information *',
                                   style: AppTypography.titleSmall.copyWith(
                                     fontWeight: FontWeight.bold,
-                                    color: AppColors.darkBrown,
+                                    color: context.themePrimaryTextColor,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -1336,7 +1349,7 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
                                   'Appointment Date & Time *',
                                   style: AppTypography.titleSmall.copyWith(
                                     fontWeight: FontWeight.bold,
-                                    color: AppColors.darkBrown,
+                                    color: context.themePrimaryTextColor,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -1406,7 +1419,7 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
                                   'Deposit Amount',
                                   style: AppTypography.titleSmall.copyWith(
                                     fontWeight: FontWeight.bold,
-                                    color: AppColors.darkBrown,
+                                    color: context.themePrimaryTextColor,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -1442,7 +1455,7 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
                                   'Status *',
                                   style: AppTypography.titleSmall.copyWith(
                                     fontWeight: FontWeight.bold,
-                                    color: AppColors.darkBrown,
+                                    color: context.themePrimaryTextColor,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -1474,7 +1487,7 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
                                   'Client Notes (Optional)',
                                   style: AppTypography.titleSmall.copyWith(
                                     fontWeight: FontWeight.bold,
-                                    color: AppColors.darkBrown,
+                                    color: context.themePrimaryTextColor,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -1496,7 +1509,7 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
                                   'Admin Notes (Optional)',
                                   style: AppTypography.titleSmall.copyWith(
                                     fontWeight: FontWeight.bold,
-                                    color: AppColors.darkBrown,
+                                    color: context.themePrimaryTextColor,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -1650,7 +1663,7 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
                                 },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.sunflowerYellow,
-                            foregroundColor: AppColors.darkBrown,
+                            foregroundColor: Theme.of(context).colorScheme.onPrimary,
                           ),
                           child: isCreating
                               ? const SizedBox(
@@ -1694,7 +1707,7 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
             child: Text(
               label,
               style: AppTypography.bodyMedium.copyWith(
-                color: AppColors.textSecondary,
+                color: context.themeSecondaryTextColor,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -1703,7 +1716,7 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
             child: Text(
               value,
               style: AppTypography.bodyMedium.copyWith(
-                color: AppColors.darkBrown,
+                color: context.themePrimaryTextColor,
               ),
             ),
           ),

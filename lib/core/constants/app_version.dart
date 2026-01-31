@@ -2,13 +2,24 @@
  * Filename: app_version.dart
  * Purpose: Global version and build number management with environment-based display
  * Author: Kevin Doyle Jr. / Infinitum Imagery LLC
- * Last Modified: 2026-01-22
+ * Last Modified: 2026-01-30
  * Dependencies: package_info_plus (for getting package info)
  * Platform Compatibility: iOS, Android, Web
+ *
+ * Commit hash: Pass at build time via --dart-define=COMMIT_HASH=<short-hash>
+ * Example: flutter build web --release --dart-define=COMMIT_HASH=$(git rev-parse --short HEAD)
  */
 
 // MARK: - Imports
 import 'package:package_info_plus/package_info_plus.dart';
+
+// MARK: - Build-Time Constants
+/// Commit hash injected at build time when deploying (e.g. from git rev-parse --short HEAD).
+/// Empty when not provided (local/dev builds).
+const String _kCommitHashFromEnvironment = String.fromEnvironment(
+  'COMMIT_HASH',
+  defaultValue: '',
+);
 
 // MARK: - App Environment Enum
 /// Application environment types
@@ -34,20 +45,29 @@ class AppVersion {
   static const String version = "1.0.0";
   
   /// Build number (incremented with each build)
-  static const int buildNumber = 2;
+  static const int buildNumber = 3;
+  
+  /// Commit hash when built with --dart-define=COMMIT_HASH=xxx (e.g. for deployed builds).
+  /// Empty string when not provided.
+  static String get commitHash => _kCommitHashFromEnvironment;
+  
+  /// Whether a commit hash was provided at build time (deployed build).
+  static bool get hasCommitHash => _kCommitHashFromEnvironment.isNotEmpty;
   
   /// Current app environment
   /// Change this to switch between dev, beta, and production
   static const AppEnvironment environment = AppEnvironment.development;
 
   // MARK: - Version String Getters
-  /// Get full version string with environment suffix
-  /// Format: "1.0.0 (Build 1) [dev]" for dev
-  /// Format: "1.0.0 (Build 1) [beta]" for beta
-  /// Format: "1.0.0 (Build 1)" for production
+  /// Get full version string with environment suffix (and optional commit hash).
+  /// Format: "1.0.0 (Build 3) abc1234 [dev]" when commit hash present
+  /// Format: "1.0.0 (Build 3) [dev]" for dev
+  /// Format: "1.0.0 (Build 3) abc1234" for production when deployed
   static String get versionString {
-    final baseVersion = "$version (Build $buildNumber)";
-    
+    final buildPart = "$version (Build $buildNumber)";
+    final hashPart = hasCommitHash ? " $commitHash" : "";
+    final baseVersion = "$buildPart$hashPart";
+
     switch (environment) {
       case AppEnvironment.development:
         return "$baseVersion [dev]";
@@ -165,12 +185,13 @@ class AppVersion {
   }
 
   /// Get version info for about screen or settings
-  /// Returns formatted string with all version details
+  /// Returns formatted string with all version details (includes commit hash when present)
   static String getAboutText() {
+    final hashLine = hasCommitHash ? "Commit: $commitHash\n" : "";
     return '''
 Version: $version
 Build: $buildNumber
-Environment: ${environmentString.toUpperCase()}
+$hashLine Environment: ${environmentString.toUpperCase()}
 ''';
   }
 }

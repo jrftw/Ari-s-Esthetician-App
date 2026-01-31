@@ -8,10 +8,12 @@
  */
 
 // MARK: - Imports
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/theme_extensions.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/logging/app_logger.dart';
@@ -40,11 +42,25 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
   int _unreadCount = 0;
   bool _showArchived = false;
 
+  /// Notifications list stream subscription; cancelled in dispose.
+  StreamSubscription<List<NotificationModel>>? _notificationsSubscription;
+  /// Unread count stream subscription; cancelled in dispose.
+  StreamSubscription<int>? _unreadCountSubscription;
+
   @override
   void initState() {
     super.initState();
     logUI('AdminNotificationsScreen initState called', tag: 'AdminNotificationsScreen');
     _loadNotifications();
+  }
+
+  @override
+  void dispose() {
+    _notificationsSubscription?.cancel();
+    _notificationsSubscription = null;
+    _unreadCountSubscription?.cancel();
+    _unreadCountSubscription = null;
+    super.dispose();
   }
 
   // MARK: - Data Loading
@@ -59,7 +75,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     try {
       // Load notifications stream for real-time updates
       final stream = _notificationService.getNotificationsStream(includeArchived: _showArchived);
-      stream.listen(
+      _notificationsSubscription = stream.listen(
         (notifications) {
           logSuccess('Loaded ${notifications.length} notifications', tag: 'AdminNotificationsScreen');
           if (mounted) {
@@ -88,7 +104,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
 
       // Also load unread count stream
       final unreadStream = _notificationService.getUnreadNotificationsCountStream();
-      unreadStream.listen(
+      _unreadCountSubscription = unreadStream.listen(
         (count) {
           if (mounted) {
             setState(() {
@@ -393,7 +409,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
               onPressed: _loadNotifications,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.sunflowerYellow,
-                foregroundColor: AppColors.darkBrown,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
               ),
               child: const Text('Retry'),
             ),
@@ -410,7 +426,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
             Icon(
               Icons.notifications_none,
               size: 64,
-              color: AppColors.textSecondary,
+              color: context.themeSecondaryTextColor,
             ),
             const SizedBox(height: 16),
             Text(
@@ -454,7 +470,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
       color: isUnread
           ? AppColors.sunflowerYellow.withOpacity(0.1)
           : isArchived
-              ? AppColors.textSecondary.withOpacity(0.05)
+              ? context.themeSecondaryTextColor.withValues(alpha: 0.05)
               : null,
       child: InkWell(
         onTap: () {
@@ -515,13 +531,13 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: AppColors.textSecondary.withOpacity(0.2),
+                                  color: context.themeSecondaryTextColor.withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Text(
                                   'Archived',
                                   style: AppTypography.bodySmall.copyWith(
-                                    color: AppColors.textSecondary,
+                                    color: context.themeSecondaryTextColor,
                                     fontSize: 10,
                                   ),
                                 ),
@@ -541,26 +557,26 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                             Icon(
                               Icons.person,
                               size: 14,
-                              color: AppColors.textSecondary,
+                              color: context.themeSecondaryTextColor,
                             ),
                             const SizedBox(width: 4),
                             Text(
                               notification.clientName,
                               style: AppTypography.bodySmall.copyWith(
-                                color: AppColors.textSecondary,
+                                color: context.themeSecondaryTextColor,
                               ),
                             ),
                             const SizedBox(width: 16),
                             Icon(
                               Icons.access_time,
                               size: 14,
-                              color: AppColors.textSecondary,
+                              color: context.themeSecondaryTextColor,
                             ),
                             const SizedBox(width: 4),
                             Text(
                               _formatDateTime(notification.createdAt),
                               style: AppTypography.bodySmall.copyWith(
-                                color: AppColors.textSecondary,
+                                color: context.themeSecondaryTextColor,
                               ),
                             ),
                           ],
@@ -572,13 +588,13 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                               Icon(
                                 Icons.calendar_today,
                                 size: 14,
-                                color: AppColors.textSecondary,
+                                color: context.themeSecondaryTextColor,
                               ),
                               const SizedBox(width: 4),
                               Text(
                                 'Appointment: ${_formatDateTime(notification.appointmentStartTime!)}',
                                 style: AppTypography.bodySmall.copyWith(
-                                  color: AppColors.textSecondary,
+                                  color: context.themeSecondaryTextColor,
                                 ),
                               ),
                             ],
@@ -601,7 +617,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                       label: const Text('Dismiss'),
                       onPressed: () => _dismissNotification(notification),
                       style: TextButton.styleFrom(
-                        foregroundColor: AppColors.darkBrown,
+                        foregroundColor: Theme.of(context).colorScheme.onPrimary,
                       ),
                     ),
                   // Archive/Unarchive button
@@ -611,7 +627,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                       label: const Text('Archive'),
                       onPressed: () => _archiveNotification(notification),
                       style: TextButton.styleFrom(
-                        foregroundColor: AppColors.darkBrown,
+                        foregroundColor: Theme.of(context).colorScheme.onPrimary,
                       ),
                     )
                   else
@@ -620,7 +636,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                       label: const Text('Unarchive'),
                       onPressed: () => _unarchiveNotification(notification),
                       style: TextButton.styleFrom(
-                        foregroundColor: AppColors.darkBrown,
+                        foregroundColor: Theme.of(context).colorScheme.onPrimary,
                       ),
                     ),
                   // Delete button
@@ -666,7 +682,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
       case NotificationType.appointmentCanceled:
         return AppColors.errorRed;
       case NotificationType.appointmentStatusChanged:
-        return AppColors.darkBrown;
+        return context.themePrimaryTextColor;
     }
   }
 

@@ -13,6 +13,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/theme_extensions.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/logging/app_logger.dart';
@@ -70,8 +71,6 @@ class _AdminClientsScreenState extends State<AdminClientsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Client Directory'),
-        backgroundColor: AppColors.sunflowerYellow,
-        foregroundColor: AppColors.darkBrown,
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
@@ -96,7 +95,7 @@ class _AdminClientsScreenState extends State<AdminClientsScreen> {
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showCreateClientDialog(context),
         backgroundColor: AppColors.sunflowerYellow,
-        foregroundColor: AppColors.darkBrown,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
         tooltip: 'Add New Client',
         child: const Icon(Icons.person_add),
       ),
@@ -206,10 +205,10 @@ class _AdminClientsScreenState extends State<AdminClientsScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(
+                Icon(
                   Icons.people_outline,
                   size: 64,
-                  color: AppColors.textSecondary,
+                  color: context.themeSecondaryTextColor,
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -220,7 +219,7 @@ class _AdminClientsScreenState extends State<AdminClientsScreen> {
                 Text(
                   'Clients will appear here after they book appointments',
                   style: AppTypography.bodyMedium.copyWith(
-                    color: AppColors.textSecondary,
+                    color: context.themeSecondaryTextColor,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -294,10 +293,10 @@ class _AdminClientsScreenState extends State<AdminClientsScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(
+                Icon(
                   Icons.search_off,
                   size: 64,
-                  color: AppColors.textSecondary,
+                  color: context.themeSecondaryTextColor,
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -308,7 +307,7 @@ class _AdminClientsScreenState extends State<AdminClientsScreen> {
                 Text(
                   'Try a different search term',
                   style: AppTypography.bodyMedium.copyWith(
-                    color: AppColors.textSecondary,
+                    color: context.themeSecondaryTextColor,
                   ),
                 ),
               ],
@@ -351,7 +350,7 @@ class _AdminClientsScreenState extends State<AdminClientsScreen> {
                     child: Text(
                       client.firstName[0].toUpperCase(),
                       style: AppTypography.titleMedium.copyWith(
-                        color: AppColors.darkBrown,
+                        color: context.themePrimaryTextColor,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -374,14 +373,14 @@ class _AdminClientsScreenState extends State<AdminClientsScreen> {
                             Icon(
                               Icons.email_outlined,
                               size: 14,
-                              color: AppColors.textSecondary,
+                              color: context.themeSecondaryTextColor,
                             ),
                             const SizedBox(width: 4),
                             Expanded(
                               child: Text(
                                 client.email,
                                 style: AppTypography.bodySmall.copyWith(
-                                  color: AppColors.textSecondary,
+                                  color: context.themeSecondaryTextColor,
                                 ),
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -394,13 +393,13 @@ class _AdminClientsScreenState extends State<AdminClientsScreen> {
                             Icon(
                               Icons.phone_outlined,
                               size: 14,
-                              color: AppColors.textSecondary,
+                              color: context.themeSecondaryTextColor,
                             ),
                             const SizedBox(width: 4),
                             Text(
                               client.phone,
                               style: AppTypography.bodySmall.copyWith(
-                                color: AppColors.textSecondary,
+                                color: context.themeSecondaryTextColor,
                               ),
                             ),
                           ],
@@ -566,13 +565,13 @@ class _AdminClientsScreenState extends State<AdminClientsScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: AppColors.textSecondary),
+          Icon(icon, size: 16, color: context.themeSecondaryTextColor),
           const SizedBox(width: 4),
           Flexible(
             child: Text(
               label,
               style: AppTypography.bodySmall.copyWith(
-                color: AppColors.textSecondary,
+                color: context.themeSecondaryTextColor,
               ),
               overflow: TextOverflow.ellipsis,
             ),
@@ -602,7 +601,7 @@ class _AdminClientsScreenState extends State<AdminClientsScreen> {
               child: Text(
                 client.firstName[0].toUpperCase(),
                 style: AppTypography.titleMedium.copyWith(
-                  color: AppColors.darkBrown,
+                  color: context.themePrimaryTextColor,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -699,7 +698,7 @@ class _AdminClientsScreenState extends State<AdminClientsScreen> {
                         Text(
                           'No appointments yet',
                           style: AppTypography.bodyMedium.copyWith(
-                            color: AppColors.textSecondary,
+                            color: context.themeSecondaryTextColor,
                           ),
                         ),
                       ]
@@ -722,7 +721,7 @@ class _AdminClientsScreenState extends State<AdminClientsScreen> {
                                     Text(
                                       DateFormat('MMM d, y • h:mm a').format(apt.startTime),
                                       style: AppTypography.bodySmall.copyWith(
-                                        color: AppColors.textSecondary,
+                                        color: context.themeSecondaryTextColor,
                                       ),
                                     ),
                                   ],
@@ -749,7 +748,7 @@ class _AdminClientsScreenState extends State<AdminClientsScreen> {
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.sunflowerYellow,
-              foregroundColor: AppColors.darkBrown,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
             ),
             child: const Text('Edit'),
           ),
@@ -784,7 +783,7 @@ class _AdminClientsScreenState extends State<AdminClientsScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 20, color: AppColors.textSecondary),
+          Icon(icon, size: 20, color: context.themeSecondaryTextColor),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -793,7 +792,7 @@ class _AdminClientsScreenState extends State<AdminClientsScreen> {
                 Text(
                   label,
                   style: AppTypography.bodySmall.copyWith(
-                    color: AppColors.textSecondary,
+                    color: context.themeSecondaryTextColor,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -822,7 +821,7 @@ class _AdminClientsScreenState extends State<AdminClientsScreen> {
       AppointmentStatus.canceled: (AppColors.statusCancelled, 'Canceled'),
     };
 
-    final (color, label) = statusConfig[status] ?? (AppColors.textSecondary, status.name);
+    final (color, label) = statusConfig[status] ?? (context.themeSecondaryTextColor, status.name);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1029,7 +1028,7 @@ class _AdminClientsScreenState extends State<AdminClientsScreen> {
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.sunflowerYellow,
-                foregroundColor: AppColors.darkBrown,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
               ),
               child: const Text('Create'),
             ),
@@ -1211,7 +1210,7 @@ class _AdminClientsScreenState extends State<AdminClientsScreen> {
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.sunflowerYellow,
-                foregroundColor: AppColors.darkBrown,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
               ),
               child: const Text('Save'),
             ),

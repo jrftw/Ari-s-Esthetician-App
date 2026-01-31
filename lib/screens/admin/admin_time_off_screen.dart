@@ -13,6 +13,7 @@ import 'package:go_router/go_router.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:flutter_datetime_picker_plus/flutter_datetime_picker_plus.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/theme_extensions.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/logging/app_logger.dart';
@@ -89,8 +90,6 @@ class _AdminTimeOffScreenState extends State<AdminTimeOffScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Time Off Management'),
-        backgroundColor: AppColors.sunflowerYellow,
-        foregroundColor: AppColors.darkBrown,
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
@@ -174,7 +173,7 @@ class _AdminTimeOffScreenState extends State<AdminTimeOffScreen> {
           formatButtonVisible: true,
           titleCentered: true,
           titleTextStyle: AppTypography.titleMedium.copyWith(
-            color: AppColors.darkBrown,
+            color: context.themePrimaryTextColor,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -198,20 +197,20 @@ class _AdminTimeOffScreenState extends State<AdminTimeOffScreen> {
             Icon(
               Icons.event_busy,
               size: 64,
-              color: AppColors.textSecondary,
+              color: context.themeSecondaryTextColor,
             ),
             const SizedBox(height: 16),
             Text(
               'No Time-Off Periods',
               style: AppTypography.titleMedium.copyWith(
-                color: AppColors.textSecondary,
+                color: context.themeSecondaryTextColor,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               'Tap the + button to add a time-off period',
               style: AppTypography.bodyMedium.copyWith(
-                color: AppColors.textSecondary,
+                color: context.themeSecondaryTextColor,
               ),
             ),
           ],
@@ -237,7 +236,7 @@ class _AdminTimeOffScreenState extends State<AdminTimeOffScreen> {
       child: ListTile(
         leading: Icon(
           timeOff.isRecurring ? Icons.repeat : Icons.event,
-          color: timeOff.isActive ? AppColors.sunflowerYellow : AppColors.textSecondary,
+          color: timeOff.isActive ? Theme.of(context).colorScheme.primary : context.themeSecondaryTextColor,
         ),
         title: Text(
           timeOff.title,
@@ -259,7 +258,7 @@ class _AdminTimeOffScreenState extends State<AdminTimeOffScreen> {
               Text(
                 timeOff.notes!,
                 style: AppTypography.bodySmall.copyWith(
-                  color: AppColors.textSecondary,
+                  color: context.themeSecondaryTextColor,
                   fontStyle: FontStyle.italic,
                 ),
               ),
@@ -272,7 +271,7 @@ class _AdminTimeOffScreenState extends State<AdminTimeOffScreen> {
             if (!timeOff.isActive)
               Icon(
                 Icons.visibility_off,
-                color: AppColors.textSecondary,
+                color: context.themeSecondaryTextColor,
                 size: 20,
               ),
             IconButton(
@@ -745,7 +744,7 @@ class _TimeOffDialogState extends State<_TimeOffDialog> {
                       onPressed: _saveTimeOff,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.sunflowerYellow,
-                        foregroundColor: AppColors.darkBrown,
+                        foregroundColor: Theme.of(context).colorScheme.onPrimary,
                       ),
                       child: const Text('Save'),
                     ),

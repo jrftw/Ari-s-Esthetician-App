@@ -11,6 +11,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/theme_extensions.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/constants/app_version.dart';
 import '../../services/auth_service.dart';
@@ -133,7 +134,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   Text(
                     'Create Account',
                     style: AppTypography.headlineLarge.copyWith(
-                      color: AppColors.darkBrown,
+                      color: context.themePrimaryTextColor,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -143,7 +144,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   Text(
                     'Sign up to manage your appointments',
                     style: AppTypography.bodyMedium.copyWith(
-                      color: AppColors.textSecondary,
+                      color: context.themeSecondaryTextColor,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -283,7 +284,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       Text(
                         'Version ${AppVersion.versionString}',
                         style: AppTypography.bodySmall.copyWith(
-                          color: AppColors.textSecondary,
+                          color: context.themeSecondaryTextColor,
                         ),
                         textAlign: TextAlign.center,
                       ),
@@ -291,7 +292,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       Text(
                         '© ${DateTime.now().year} Copyright Arianna DeAngelis\nAll rights reserved',
                         style: AppTypography.bodySmall.copyWith(
-                          color: AppColors.textSecondary,
+                          color: context.themeSecondaryTextColor,
                         ),
                         textAlign: TextAlign.center,
                       ),
@@ -299,7 +300,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       Text(
                         'Built in the USA 🇺🇸 with ❤️ by @jrftw',
                         style: AppTypography.bodySmall.copyWith(
-                          color: AppColors.textSecondary,
+                          color: context.themeSecondaryTextColor,
                         ),
                         textAlign: TextAlign.center,
                       ),

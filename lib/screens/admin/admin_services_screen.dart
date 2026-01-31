@@ -20,6 +20,7 @@ import 'package:printing/printing.dart';
 import 'dart:html'
     if (dart.library.io) 'html_stub.dart' as html;
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/theme_extensions.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/logging/app_logger.dart';
@@ -100,8 +101,6 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Services Management'),
-        backgroundColor: AppColors.sunflowerYellow,
-        foregroundColor: AppColors.darkBrown,
         actions: [
           // MARK: - PDF Export Button
           IconButton(
@@ -150,7 +149,7 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showServiceFormDialog(context),
         backgroundColor: AppColors.sunflowerYellow,
-        foregroundColor: AppColors.darkBrown,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
         child: const Icon(Icons.add),
       ),
     );
@@ -220,10 +219,10 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(
+                Icon(
                   Icons.spa_outlined,
                   size: 64,
-                  color: AppColors.textSecondary,
+                  color: context.themeSecondaryTextColor,
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -234,7 +233,7 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
                 Text(
                   'Tap the + button to add your first service',
                   style: AppTypography.bodyMedium.copyWith(
-                    color: AppColors.textSecondary,
+                    color: context.themeSecondaryTextColor,
                   ),
                 ),
               ],
@@ -322,7 +321,7 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
                         Text(
                           service.description,
                           style: AppTypography.bodyMedium.copyWith(
-                            color: AppColors.textSecondary,
+                            color: context.themeSecondaryTextColor,
                           ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -402,7 +401,7 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
                 Text(
                   'Buffer: ${service.bufferTimeBeforeMinutes} min before, ${service.bufferTimeAfterMinutes} min after',
                   style: AppTypography.bodySmall.copyWith(
-                    color: AppColors.textSecondary,
+                    color: context.themeSecondaryTextColor,
                   ),
                 ),
               ],
@@ -416,7 +415,7 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
                     icon: Icon(
                       service.isActive ? Icons.visibility_off : Icons.visibility,
                       color: service.isActive
-                          ? AppColors.textSecondary
+                          ? context.themeSecondaryTextColor
                           : AppColors.sunflowerYellow,
                     ),
                     onPressed: () => _toggleServiceStatus(service),
@@ -457,13 +456,13 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: AppColors.textSecondary),
+          Icon(icon, size: 16, color: context.themeSecondaryTextColor),
           const SizedBox(width: 4),
           Flexible(
             child: Text(
               label,
               style: AppTypography.bodySmall.copyWith(
-                color: AppColors.textSecondary,
+                color: context.themeSecondaryTextColor,
               ),
               overflow: TextOverflow.ellipsis,
             ),
@@ -483,7 +482,7 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
       case ServicePackageTier.mid:
         return AppColors.infoBlue; // Standard blue
       case ServicePackageTier.lower:
-        return AppColors.textSecondary; // Basic gray
+        return context.themeSecondaryTextColor; // Basic gray
     }
   }
 

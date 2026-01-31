@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
+import '../../core/theme/theme_extensions.dart';
 import '../../core/logging/app_logger.dart';
 
 // MARK: - Welcome Screen
@@ -39,20 +40,20 @@ class WelcomeScreen extends StatelessWidget {
                   width: 140,
                   height: 140,
                   decoration: BoxDecoration(
-                    color: AppColors.sunflowerYellow,
+                    color: Theme.of(context).colorScheme.primary,
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.shadowColor,
+                        color: Theme.of(context).colorScheme.shadow,
                         blurRadius: 30,
                         offset: const Offset(0, 15),
                       ),
                     ],
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.spa,
                     size: 70,
-                    color: AppColors.darkBrown,
+                    color: Theme.of(context).colorScheme.onPrimary,
                   ),
                 ),
                 
@@ -61,8 +62,8 @@ class WelcomeScreen extends StatelessWidget {
                 // MARK: - App Name
                 Text(
                   'Ari\'s Esthetician',
-                  style: AppTypography.headlineLarge.copyWith(
-                    color: AppColors.darkBrown,
+                  style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                    color: context.themePrimaryTextColor,
                     fontWeight: FontWeight.bold,
                   ),
                   textAlign: TextAlign.center,
@@ -72,8 +73,8 @@ class WelcomeScreen extends StatelessWidget {
                 
                 Text(
                   'Book Your Appointment Online',
-                  style: AppTypography.titleMedium.copyWith(
-                    color: AppColors.textSecondary,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: context.themeSecondaryTextColor,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -81,7 +82,7 @@ class WelcomeScreen extends StatelessWidget {
                 const SizedBox(height: 48),
                 
                 // MARK: - Features Section
-                _buildFeatureSection(),
+                _buildFeatureSection(context),
                 
                 const SizedBox(height: 48),
                 
@@ -99,28 +100,32 @@ class WelcomeScreen extends StatelessWidget {
 
   // MARK: - Feature Section
   /// Displays key features of the app
-  Widget _buildFeatureSection() {
+  Widget _buildFeatureSection(BuildContext context) {
     return Column(
       children: [
         _buildFeatureItem(
+          context: context,
           icon: Icons.calendar_today,
           title: 'Easy Booking',
           description: 'Schedule your appointment in just a few clicks',
         ),
         const SizedBox(height: 24),
         _buildFeatureItem(
+          context: context,
           icon: Icons.payment,
           title: 'Secure Payments',
           description: 'Pay your deposit safely with Stripe',
         ),
         const SizedBox(height: 24),
         _buildFeatureItem(
+          context: context,
           icon: Icons.notifications,
           title: 'Reminders',
           description: 'Get email reminders before your appointment',
         ),
         const SizedBox(height: 24),
         _buildFeatureItem(
+          context: context,
           icon: Icons.event_available,
           title: 'Calendar Sync',
           description: 'Add appointments directly to your calendar',
@@ -132,10 +137,12 @@ class WelcomeScreen extends StatelessWidget {
   // MARK: - Feature Item
   /// Individual feature display
   Widget _buildFeatureItem({
+    required BuildContext context,
     required IconData icon,
     required String title,
     required String description,
   }) {
+    final primary = Theme.of(context).colorScheme.primary;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -143,14 +150,10 @@ class WelcomeScreen extends StatelessWidget {
           width: 48,
           height: 48,
           decoration: BoxDecoration(
-            color: AppColors.sunflowerYellow.withOpacity(0.2),
+            color: primary.withValues(alpha: 0.2),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Icon(
-            icon,
-            color: AppColors.sunflowerYellow,
-            size: 24,
-          ),
+          child: Icon(icon, color: primary, size: 24),
         ),
         const SizedBox(width: 16),
         Expanded(
@@ -159,16 +162,16 @@ class WelcomeScreen extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: AppTypography.titleSmall.copyWith(
-                  color: AppColors.darkBrown,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: context.themePrimaryTextColor,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(height: 4),
               Text(
                 description,
-                style: AppTypography.bodySmall.copyWith(
-                  color: AppColors.textSecondary,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: context.themeSecondaryTextColor,
                 ),
               ),
             ],
@@ -193,8 +196,8 @@ class WelcomeScreen extends StatelessWidget {
               context.push('/account-choice');
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.sunflowerYellow,
-              foregroundColor: AppColors.darkBrown,
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
               elevation: 4,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -202,8 +205,8 @@ class WelcomeScreen extends StatelessWidget {
             ),
             child: Text(
               'Get Started',
-              style: AppTypography.buttonText.copyWith(
-                color: AppColors.darkBrown,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: Theme.of(context).colorScheme.onPrimary,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -222,16 +225,16 @@ class WelcomeScreen extends StatelessWidget {
               context.go('/booking');
             },
             style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.darkBrown,
-              side: BorderSide(color: AppColors.sunflowerYellow, width: 2),
+              foregroundColor: Theme.of(context).colorScheme.primary,
+              side: BorderSide(color: Theme.of(context).colorScheme.primary, width: 2),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
             child: Text(
               'Continue as Guest',
-              style: AppTypography.buttonText.copyWith(
-                color: AppColors.darkBrown,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: Theme.of(context).colorScheme.primary,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -248,8 +251,8 @@ class WelcomeScreen extends StatelessWidget {
           },
           child: Text(
             'Already have an account? Sign in',
-            style: AppTypography.bodyMedium.copyWith(
-              color: AppColors.textSecondary,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: context.themeSecondaryTextColor,
               decoration: TextDecoration.underline,
             ),
           ),

@@ -11,6 +11,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/theme_extensions.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/logging/app_logger.dart';
@@ -256,7 +257,7 @@ class _AdminEarningsScreenState extends State<AdminEarningsScreen> {
               label: const Text('Retry'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.sunflowerYellow,
-                foregroundColor: AppColors.darkBrown,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
               ),
             ),
           ],
@@ -404,7 +405,7 @@ class _AdminEarningsScreenState extends State<AdminEarningsScreen> {
                   Text(
                     title,
                     style: AppTypography.bodySmall.copyWith(
-                      color: AppColors.textSecondary,
+                      color: context.themeSecondaryTextColor,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -412,7 +413,7 @@ class _AdminEarningsScreenState extends State<AdminEarningsScreen> {
                     value,
                     style: AppTypography.headlineMedium.copyWith(
                       fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
+                      color: context.themePrimaryTextColor,
                     ),
                   ),
                 ],

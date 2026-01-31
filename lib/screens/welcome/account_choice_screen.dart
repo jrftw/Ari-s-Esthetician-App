@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
+import '../../core/theme/theme_extensions.dart';
 import '../../core/logging/app_logger.dart';
 
 // MARK: - Account Choice Screen
@@ -29,7 +30,7 @@ class AccountChoiceScreen extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.darkBrown),
+          icon: Icon(Icons.arrow_back, color: context.themePrimaryTextColor),
           onPressed: () => context.pop(),
         ),
       ),
@@ -45,8 +46,8 @@ class AccountChoiceScreen extends StatelessWidget {
                 // MARK: - Title
                 Text(
                   'Choose How to Continue',
-                  style: AppTypography.headlineMedium.copyWith(
-                    color: AppColors.darkBrown,
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    color: context.themePrimaryTextColor,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -55,8 +56,8 @@ class AccountChoiceScreen extends StatelessWidget {
                 
                 Text(
                   'Create an account to save your information and view booking history, or continue as a guest.',
-                  style: AppTypography.bodyMedium.copyWith(
-                    color: AppColors.textSecondary,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: context.themeSecondaryTextColor,
                   ),
                 ),
                 
@@ -74,7 +75,7 @@ class AccountChoiceScreen extends StatelessWidget {
                     'Receive appointment reminders',
                   ],
                   buttonText: 'Sign Up',
-                  buttonColor: AppColors.sunflowerYellow,
+                  buttonColor: Theme.of(context).colorScheme.primary,
                   onPressed: () {
                     logRouter('Navigating to signup', tag: 'AccountChoiceScreen');
                     context.push('/signup');
@@ -95,7 +96,7 @@ class AccountChoiceScreen extends StatelessWidget {
                     'Receive email confirmation',
                   ],
                   buttonText: 'Continue as Guest',
-                  buttonColor: AppColors.mutedGreen,
+                  buttonColor: Theme.of(context).colorScheme.tertiary,
                   onPressed: () {
                     logRouter('Navigating to booking as guest', tag: 'AccountChoiceScreen');
                     context.go('/booking');
@@ -122,14 +123,17 @@ class AccountChoiceScreen extends StatelessWidget {
     required Color buttonColor,
     required VoidCallback onPressed,
   }) {
+    final surfaceColor = context.themeSurfaceColor;
+    final primaryText = context.themePrimaryTextColor;
+    final secondaryText = context.themeSecondaryTextColor;
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: surfaceColor,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.shadowColor,
+            color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.1),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -145,21 +149,17 @@ class AccountChoiceScreen extends StatelessWidget {
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: buttonColor.withOpacity(0.2),
+                  color: buttonColor.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
-                  icon,
-                  color: buttonColor,
-                  size: 28,
-                ),
+                child: Icon(icon, color: buttonColor, size: 28),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Text(
                   title,
-                  style: AppTypography.titleLarge.copyWith(
-                    color: AppColors.darkBrown,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: primaryText,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -175,18 +175,12 @@ class AccountChoiceScreen extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  Icons.check_circle,
-                  color: buttonColor,
-                  size: 20,
-                ),
+                Icon(Icons.check_circle, color: buttonColor, size: 20),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     benefit,
-                    style: AppTypography.bodyMedium.copyWith(
-                      color: AppColors.textPrimary,
-                    ),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: primaryText),
                   ),
                 ),
               ],
@@ -203,7 +197,7 @@ class AccountChoiceScreen extends StatelessWidget {
               onPressed: onPressed,
               style: ElevatedButton.styleFrom(
                 backgroundColor: buttonColor,
-                foregroundColor: AppColors.darkBrown,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
                 elevation: 2,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -211,8 +205,8 @@ class AccountChoiceScreen extends StatelessWidget {
               ),
               child: Text(
                 buttonText,
-                style: AppTypography.buttonText.copyWith(
-                  color: AppColors.darkBrown,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: Theme.of(context).colorScheme.onPrimary,
                   fontWeight: FontWeight.bold,
                 ),
               ),

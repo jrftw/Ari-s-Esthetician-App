@@ -14,6 +14,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../core/constants/app_colors.dart';
 import '../core/constants/app_typography.dart';
 import '../core/logging/app_logger.dart';
+import '../core/theme/theme_extensions.dart';
 import '../../services/auth_service.dart';
 import '../../services/view_mode_service.dart';
 
@@ -138,10 +139,10 @@ class _SplashScreenState extends State<SplashScreen> {
                   ),
                 ],
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.spa,
                 size: 60,
-                color: AppColors.darkBrown,
+                color: context.themePrimaryTextColor,
               ),
             ),
             
@@ -151,7 +152,7 @@ class _SplashScreenState extends State<SplashScreen> {
             Text(
               'Ari\'s Esthetician',
               style: AppTypography.headlineMedium.copyWith(
-                color: AppColors.darkBrown,
+                color: context.themePrimaryTextColor,
               ),
             ),
             

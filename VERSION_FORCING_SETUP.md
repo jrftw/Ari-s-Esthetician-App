@@ -51,7 +51,24 @@ You need to create a document in the `app_version` collection with the document 
 }
 ```
 
-## Updating the Required Version
+## Updating the Required Version (Always Force Newest Deployed Build)
+
+The app forces the **version stored in Firestore `app_version/latest`** (except in development). To always force the **newest deployed version**, update that document when you deploy.
+
+### Option A: Deploy script (recommended)
+
+When you deploy with `deploy_hosting.ps1`, it automatically parses `pubspec.yaml` and runs `scripts/update_app_version_firestore.js` to set `app_version/latest` to the deployed version and build. Ensure `GOOGLE_APPLICATION_CREDENTIALS` is set (or `gcloud auth application-default login`) so the script can write to Firestore.
+
+### Option B: Manual script after deploy
+
+Run after each deploy:
+
+```bash
+node scripts/update_app_version_firestore.js <version> <buildNumber>
+# Example: node scripts/update_app_version_firestore.js 1.0.0 3
+```
+
+### Option C: Manual Firestore update
 
 When you release a new version:
 
@@ -66,7 +83,7 @@ When you release a new version:
    version: 1.0.1+2
    ```
 
-3. Update the Firestore document `app_version/latest` with the new required version
+3. Update the Firestore document `app_version/latest` with the new required version (and set `forceUpdate: true`)
 
 ## Development Mode
 
