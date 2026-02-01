@@ -2,7 +2,7 @@
  * Filename: business_settings_model.dart
  * Purpose: Data model for configurable business settings and branding
  * Author: Kevin Doyle Jr. / Infinitum Imagery LLC
- * Last Modified: 2024-01-XX
+ * Last Modified: 2026-01-31
  * Dependencies: cloud_firestore, equatable, json_annotation
  * Platform Compatibility: iOS, Android, Web
  */
@@ -139,13 +139,28 @@ class BusinessSettingsModel extends Equatable {
   @JsonKey(defaultValue: false)
   final bool paymentsEnabled;
   
-  /// Whether to require compliance forms at booking: Health & Skin Disclosure,
-  /// Required Acknowledgements, Terms & Conditions, and Cancellation & No-Show Policy.
-  /// When true, all four sections are shown and required; when false, none are shown.
-  /// Stored appointments may or may not have compliance data (backwards compatible).
+  /// Global toggle for compliance forms at booking. When false, no compliance sections
+  /// are shown. When true, each section is controlled by its individual toggle below.
+  /// Backwards compatible: old docs without per-form flags behave as "all four on" when global is true.
   @JsonKey(defaultValue: true)
   final bool requireComplianceForms;
-  
+
+  /// When global compliance is on: require Health & Skin Disclosure section.
+  /// Null (missing in Firestore) = treat as true for backwards compatibility.
+  final bool? requireHealthDisclosure;
+
+  /// When global compliance is on: require Required Acknowledgements section.
+  /// Null = treat as true for backwards compatibility.
+  final bool? requireRequiredAcknowledgments;
+
+  /// When global compliance is on: require Terms & Conditions section.
+  /// Null = treat as true for backwards compatibility.
+  final bool? requireTermsAndConditions;
+
+  /// When global compliance is on: require Cancellation & No-Show Policy section.
+  /// Null = treat as true for backwards compatibility.
+  final bool? requireCancellationPolicy;
+
   /// Whether to allow same-day booking. When true, clients can book today; only times
   /// that have not yet passed are shown (e.g. at 4 PM they cannot pick 9 AM).
   /// When false, clients cannot book within 24 hours (first bookable slot is 24h from now).
@@ -189,10 +204,31 @@ class BusinessSettingsModel extends Equatable {
     this.cancellationFeeCents,
     this.paymentsEnabled = false,
     this.requireComplianceForms = true,
+    this.requireHealthDisclosure,
+    this.requireRequiredAcknowledgments,
+    this.requireTermsAndConditions,
+    this.requireCancellationPolicy,
     this.allowSameDayBooking = true,
     required this.createdAt,
     required this.updatedAt,
   });
+
+  // MARK: - Effective Compliance Form Getters (backwards compatible)
+  /// True when global compliance is on and Health & Skin Disclosure is enabled (or unspecified).
+  bool get enableHealthDisclosure =>
+      requireComplianceForms && (requireHealthDisclosure ?? true);
+
+  /// True when global compliance is on and Required Acknowledgements is enabled (or unspecified).
+  bool get enableRequiredAcknowledgments =>
+      requireComplianceForms && (requireRequiredAcknowledgments ?? true);
+
+  /// True when global compliance is on and Terms & Conditions is enabled (or unspecified).
+  bool get enableTermsAndConditions =>
+      requireComplianceForms && (requireTermsAndConditions ?? true);
+
+  /// True when global compliance is on and Cancellation & No-Show Policy is enabled (or unspecified).
+  bool get enableCancellationPolicy =>
+      requireComplianceForms && (requireCancellationPolicy ?? true);
 
   // MARK: - Factory Constructors
   /// Create a BusinessSettingsModel from Firestore document
@@ -251,6 +287,10 @@ class BusinessSettingsModel extends Equatable {
       timezone: 'America/New_York',
       weeklyHours: defaultWeeklyHours,
       requireComplianceForms: true,
+      requireHealthDisclosure: true,
+      requireRequiredAcknowledgments: true,
+      requireTermsAndConditions: true,
+      requireCancellationPolicy: true,
       allowSameDayBooking: true,
       createdAt: now,
       updatedAt: now,
@@ -325,6 +365,10 @@ class BusinessSettingsModel extends Equatable {
     String? stripeSecretKey,
     bool? paymentsEnabled,
     bool? requireComplianceForms,
+    bool? requireHealthDisclosure,
+    bool? requireRequiredAcknowledgments,
+    bool? requireTermsAndConditions,
+    bool? requireCancellationPolicy,
     bool? allowSameDayBooking,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -357,6 +401,13 @@ class BusinessSettingsModel extends Equatable {
       cancellationFeeCents: cancellationFeeCents ?? this.cancellationFeeCents,
       paymentsEnabled: paymentsEnabled ?? this.paymentsEnabled,
       requireComplianceForms: requireComplianceForms ?? this.requireComplianceForms,
+      requireHealthDisclosure: requireHealthDisclosure ?? this.requireHealthDisclosure,
+      requireRequiredAcknowledgments:
+          requireRequiredAcknowledgments ?? this.requireRequiredAcknowledgments,
+      requireTermsAndConditions:
+          requireTermsAndConditions ?? this.requireTermsAndConditions,
+      requireCancellationPolicy:
+          requireCancellationPolicy ?? this.requireCancellationPolicy,
       allowSameDayBooking: allowSameDayBooking ?? this.allowSameDayBooking,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
@@ -392,6 +443,10 @@ class BusinessSettingsModel extends Equatable {
         cancellationFeeCents,
         paymentsEnabled,
         requireComplianceForms,
+        requireHealthDisclosure,
+        requireRequiredAcknowledgments,
+        requireTermsAndConditions,
+        requireCancellationPolicy,
         allowSameDayBooking,
         createdAt,
         updatedAt,

@@ -809,46 +809,50 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
         return;
       }
       
-      // Validate compliance forms only when business setting requires them
-      if (_businessSettings?.requireComplianceForms != false) {
-        // Validate Health & Skin Disclosure: each item must be checked OR have "Not applicable"
-        final healthNotApplicable = _isHealthDisclosureItemNotApplicable;
-        if (!_hasSkinConditions && !healthNotApplicable(_skinConditionsDetailController.text)) {
-          _showError('Health & Skin Disclosure: For "Skin conditions", either check the box or type "Not applicable" below.');
-          return;
+      // Validate compliance forms only for sections that are enabled (global + individual toggles; backwards compatible)
+      final s = _businessSettings;
+      if (s != null) {
+        if (s.enableHealthDisclosure) {
+          final healthNotApplicable = _isHealthDisclosureItemNotApplicable;
+          if (!_hasSkinConditions && !healthNotApplicable(_skinConditionsDetailController.text)) {
+            _showError('Health & Skin Disclosure: For "Skin conditions", either check the box or type "Not applicable" below.');
+            return;
+          }
+          if (!_hasAllergies && !healthNotApplicable(_allergiesDetailController.text)) {
+            _showError('Health & Skin Disclosure: For "Allergies", either check the box or type "Not applicable" below.');
+            return;
+          }
+          if (!_hasCurrentMedications && !healthNotApplicable(_currentMedicationsDetailController.text)) {
+            _showError('Health & Skin Disclosure: For "Current medications", either check the box or type "Not applicable" below.');
+            return;
+          }
+          if (!_isPregnantOrBreastfeeding && !healthNotApplicable(_pregnantOrBreastfeedingDetailController.text)) {
+            _showError('Health & Skin Disclosure: For "Pregnancy or breastfeeding", either check the box or type "Not applicable" below.');
+            return;
+          }
+          if (!_hasRecentCosmeticTreatments && !healthNotApplicable(_recentCosmeticTreatmentsDetailController.text)) {
+            _showError('Health & Skin Disclosure: For "Recent cosmetic treatments", either check the box or type "Not applicable" below.');
+            return;
+          }
+          if (!_hasKnownReactions && !healthNotApplicable(_knownReactionsDetailController.text)) {
+            _showError('Health & Skin Disclosure: For "Known reactions to skincare products", either check the box or type "Not applicable" below.');
+            return;
+          }
         }
-        if (!_hasAllergies && !healthNotApplicable(_allergiesDetailController.text)) {
-          _showError('Health & Skin Disclosure: For "Allergies", either check the box or type "Not applicable" below.');
-          return;
-        }
-        if (!_hasCurrentMedications && !healthNotApplicable(_currentMedicationsDetailController.text)) {
-          _showError('Health & Skin Disclosure: For "Current medications", either check the box or type "Not applicable" below.');
-          return;
-        }
-        if (!_isPregnantOrBreastfeeding && !healthNotApplicable(_pregnantOrBreastfeedingDetailController.text)) {
-          _showError('Health & Skin Disclosure: For "Pregnancy or breastfeeding", either check the box or type "Not applicable" below.');
-          return;
-        }
-        if (!_hasRecentCosmeticTreatments && !healthNotApplicable(_recentCosmeticTreatmentsDetailController.text)) {
-          _showError('Health & Skin Disclosure: For "Recent cosmetic treatments", either check the box or type "Not applicable" below.');
-          return;
-        }
-        if (!_hasKnownReactions && !healthNotApplicable(_knownReactionsDetailController.text)) {
-          _showError('Health & Skin Disclosure: For "Known reactions to skincare products", either check the box or type "Not applicable" below.');
-          return;
-        }
-        if (!_termsAccepted) {
+        if (s.enableTermsAndConditions && !_termsAccepted) {
           _showError('You must accept the Terms & Conditions to proceed');
           return;
         }
-        if (!_understandsResultsNotGuaranteed ||
-            !_understandsServicesNonMedical ||
-            !_agreesToFollowAftercare ||
-            !_acceptsInherentRisks) {
-          _showError('You must accept all required acknowledgments to proceed');
-          return;
+        if (s.enableRequiredAcknowledgments) {
+          if (!_understandsResultsNotGuaranteed ||
+              !_understandsServicesNonMedical ||
+              !_agreesToFollowAftercare ||
+              !_acceptsInherentRisks) {
+            _showError('You must accept all required acknowledgments to proceed');
+            return;
+          }
         }
-        if (!_cancellationPolicyAcknowledged) {
+        if (s.enableCancellationPolicy && !_cancellationPolicyAcknowledged) {
           _showError('You must check "I understand and agree to the cancellation and no-show policy" to proceed');
           return;
         }
@@ -1105,12 +1109,12 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
     try {
       logLoading('Submitting booking...', tag: 'ClientBookingScreen');
       
-      // Capture device metadata and compliance data only when business requires compliance forms
-      final requireCompliance = _businessSettings?.requireComplianceForms != false;
+      // Capture device metadata and compliance data only for sections that are enabled (global + individual toggles; backwards compatible)
+      final settings = _businessSettings;
       final deviceMetadata = await DeviceMetadataService.getDeviceMetadata();
       final nowUtc = DateTime.now().toUtc();
       final nowLocal = DateTime.now();
-      
+
       TermsAcceptanceMetadata? termsAcceptanceMetadata;
       HealthDisclosure? healthDisclosure;
       RequiredAcknowledgments? requiredAcknowledgments;
@@ -1118,58 +1122,66 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
       DateTime? requiredAcknowledgmentsAcceptedAt;
       CancellationPolicySnapshot? cancellationPolicySnapshot;
       bool cancellationPolicyAcknowledged = false;
-      
-      if (requireCompliance) {
-        termsAcceptanceMetadata = TermsAcceptanceMetadata(
-          termsAccepted: _termsAccepted,
-          termsAcceptedAtUtc: nowUtc,
-          termsAcceptedAtLocal: nowLocal,
-          ipAddress: deviceMetadata['ipAddress'],
-          userAgent: deviceMetadata['userAgent'],
-          platform: deviceMetadata['platform'],
-          osVersion: deviceMetadata['osVersion'],
-        );
-        healthDisclosure = HealthDisclosure(
-          hasSkinConditions: _hasSkinConditions,
-          hasAllergies: _hasAllergies,
-          hasCurrentMedications: _hasCurrentMedications,
-          isPregnantOrBreastfeeding: _isPregnantOrBreastfeeding,
-          hasRecentCosmeticTreatments: _hasRecentCosmeticTreatments,
-          hasKnownReactions: _hasKnownReactions,
-          additionalNotes: _healthDisclosureNotesController.text.trim().isEmpty
-              ? null
-              : _healthDisclosureNotesController.text.trim(),
-        );
-        requiredAcknowledgments = RequiredAcknowledgments(
-          understandsResultsNotGuaranteed: _understandsResultsNotGuaranteed,
-          understandsServicesNonMedical: _understandsServicesNonMedical,
-          agreesToFollowAftercare: _agreesToFollowAftercare,
-          acceptsInherentRisks: _acceptsInherentRisks,
-        );
-        String detailOrNotApplicable(TextEditingController c, bool checked) {
-          final t = c.text.trim();
-          if (checked) return t.isEmpty ? 'Yes' : t;
-          return t.isEmpty ? 'Not applicable' : t;
+
+      if (settings != null) {
+        if (settings.enableTermsAndConditions) {
+          termsAcceptanceMetadata = TermsAcceptanceMetadata(
+            termsAccepted: _termsAccepted,
+            termsAcceptedAtUtc: nowUtc,
+            termsAcceptedAtLocal: nowLocal,
+            ipAddress: deviceMetadata['ipAddress'],
+            userAgent: deviceMetadata['userAgent'],
+            platform: deviceMetadata['platform'],
+            osVersion: deviceMetadata['osVersion'],
+          );
         }
-        healthDisclosureDetails = <String, String>{
-          'skinConditions': detailOrNotApplicable(_skinConditionsDetailController, _hasSkinConditions),
-          'allergies': detailOrNotApplicable(_allergiesDetailController, _hasAllergies),
-          'currentMedications': detailOrNotApplicable(_currentMedicationsDetailController, _hasCurrentMedications),
-          'pregnantOrBreastfeeding': detailOrNotApplicable(_pregnantOrBreastfeedingDetailController, _isPregnantOrBreastfeeding),
-          'recentCosmeticTreatments': detailOrNotApplicable(_recentCosmeticTreatmentsDetailController, _hasRecentCosmeticTreatments),
-          'knownReactions': detailOrNotApplicable(_knownReactionsDetailController, _hasKnownReactions),
-        };
-        if (_healthDisclosureNotesController.text.trim().isNotEmpty) {
-          healthDisclosureDetails['additionalNotes'] = _healthDisclosureNotesController.text.trim();
+        if (settings.enableHealthDisclosure) {
+          healthDisclosure = HealthDisclosure(
+            hasSkinConditions: _hasSkinConditions,
+            hasAllergies: _hasAllergies,
+            hasCurrentMedications: _hasCurrentMedications,
+            isPregnantOrBreastfeeding: _isPregnantOrBreastfeeding,
+            hasRecentCosmeticTreatments: _hasRecentCosmeticTreatments,
+            hasKnownReactions: _hasKnownReactions,
+            additionalNotes: _healthDisclosureNotesController.text.trim().isEmpty
+                ? null
+                : _healthDisclosureNotesController.text.trim(),
+          );
+          String detailOrNotApplicable(TextEditingController c, bool checked) {
+            final t = c.text.trim();
+            if (checked) return t.isEmpty ? 'Yes' : t;
+            return t.isEmpty ? 'Not applicable' : t;
+          }
+          healthDisclosureDetails = <String, String>{
+            'skinConditions': detailOrNotApplicable(_skinConditionsDetailController, _hasSkinConditions),
+            'allergies': detailOrNotApplicable(_allergiesDetailController, _hasAllergies),
+            'currentMedications': detailOrNotApplicable(_currentMedicationsDetailController, _hasCurrentMedications),
+            'pregnantOrBreastfeeding': detailOrNotApplicable(_pregnantOrBreastfeedingDetailController, _isPregnantOrBreastfeeding),
+            'recentCosmeticTreatments': detailOrNotApplicable(_recentCosmeticTreatmentsDetailController, _hasRecentCosmeticTreatments),
+            'knownReactions': detailOrNotApplicable(_knownReactionsDetailController, _hasKnownReactions),
+          };
+          if (_healthDisclosureNotesController.text.trim().isNotEmpty) {
+            healthDisclosureDetails['additionalNotes'] = _healthDisclosureNotesController.text.trim();
+          }
         }
-        requiredAcknowledgmentsAcceptedAt = nowUtc;
-        cancellationPolicySnapshot = CancellationPolicySnapshot(
-          acknowledged: _cancellationPolicyAcknowledged,
-          acknowledgedAt: nowUtc,
-          policyVersion: TermsAndConditions.cancellationPolicyVersion,
-          policyTextHash: null,
-        );
-        cancellationPolicyAcknowledged = _cancellationPolicyAcknowledged;
+        if (settings.enableRequiredAcknowledgments) {
+          requiredAcknowledgments = RequiredAcknowledgments(
+            understandsResultsNotGuaranteed: _understandsResultsNotGuaranteed,
+            understandsServicesNonMedical: _understandsServicesNonMedical,
+            agreesToFollowAftercare: _agreesToFollowAftercare,
+            acceptsInherentRisks: _acceptsInherentRisks,
+          );
+          requiredAcknowledgmentsAcceptedAt = nowUtc;
+        }
+        if (settings.enableCancellationPolicy) {
+          cancellationPolicySnapshot = CancellationPolicySnapshot(
+            acknowledged: _cancellationPolicyAcknowledged,
+            acknowledgedAt: nowUtc,
+            policyVersion: TermsAndConditions.cancellationPolicyVersion,
+            policyTextHash: null,
+          );
+          cancellationPolicyAcknowledged = _cancellationPolicyAcknowledged;
+        }
       }
       
       // Total discount for this booking (same value stored on each appointment)
@@ -2501,16 +2513,24 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
           const SizedBox(height: 32),
           ],
           
-          // MARK: - Compliance Forms (only when business setting requires them)
-          if (_businessSettings?.requireComplianceForms != false) ...[
-            _buildHealthDisclosureSection(),
-            const SizedBox(height: 32),
-            _buildRequiredAcknowledgmentsSection(),
-            const SizedBox(height: 32),
-            _buildTermsAndConditionsSection(),
-            const SizedBox(height: 32),
-            _buildCancellationPolicySection(),
-            const SizedBox(height: 24),
+          // MARK: - Compliance Forms (global + individual toggles; backwards compatible)
+          if (_businessSettings != null) ...[
+            if (_businessSettings!.enableHealthDisclosure) ...[
+              _buildHealthDisclosureSection(),
+              const SizedBox(height: 32),
+            ],
+            if (_businessSettings!.enableRequiredAcknowledgments) ...[
+              _buildRequiredAcknowledgmentsSection(),
+              const SizedBox(height: 32),
+            ],
+            if (_businessSettings!.enableTermsAndConditions) ...[
+              _buildTermsAndConditionsSection(),
+              const SizedBox(height: 32),
+            ],
+            if (_businessSettings!.enableCancellationPolicy) ...[
+              _buildCancellationPolicySection(),
+              const SizedBox(height: 24),
+            ],
           ],
           
           // Booking Summary

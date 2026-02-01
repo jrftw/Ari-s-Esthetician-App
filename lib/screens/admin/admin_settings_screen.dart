@@ -2,7 +2,7 @@
  * Filename: admin_settings_screen.dart
  * Purpose: Comprehensive admin settings screen for managing business settings, branding, policies, and integrations
  * Author: Kevin Doyle Jr. / Infinitum Imagery LLC
- * Last Modified: 2025-01-30
+ * Last Modified: 2026-01-31
  * Dependencies: Flutter, cloud_firestore, services, models
  * Platform Compatibility: iOS, Android, Web
  */
@@ -46,8 +46,13 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   bool _paymentsEnabled = false;
   bool _calendarSyncEnabled = false;
   String _calendarSyncProvider = 'google';
-  /// When true, booking requires Health & Skin Disclosure, Required Acknowledgements, Terms & Conditions, and Cancellation & No-Show Policy.
+  /// Global toggle: when true, compliance forms are enabled; individual toggles then control each section.
   bool _requireComplianceForms = true;
+  /// Individual compliance form toggles (only apply when global is on). Null in settings = treat as true (backwards compat).
+  bool _requireHealthDisclosure = true;
+  bool _requireRequiredAcknowledgments = true;
+  bool _requireTermsAndConditions = true;
+  bool _requireCancellationPolicy = true;
   /// When true, clients can book same day (only future times shown). When false, no booking within 24 hours.
   bool _allowSameDayBooking = true;
 
@@ -194,6 +199,10 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     _calendarSyncEnabled = settings.calendarSyncEnabled;
     _calendarSyncProvider = settings.calendarSyncProvider ?? 'google';
     _requireComplianceForms = settings.requireComplianceForms;
+    _requireHealthDisclosure = settings.requireHealthDisclosure ?? true;
+    _requireRequiredAcknowledgments = settings.requireRequiredAcknowledgments ?? true;
+    _requireTermsAndConditions = settings.requireTermsAndConditions ?? true;
+    _requireCancellationPolicy = settings.requireCancellationPolicy ?? true;
     _allowSameDayBooking = settings.allowSameDayBooking;
   }
 
@@ -315,6 +324,10 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           : ((double.tryParse(_cancellationFeeController.text.trim()) ?? 0.0) * 100).toInt(),
       paymentsEnabled: _paymentsEnabled,
       requireComplianceForms: _requireComplianceForms,
+      requireHealthDisclosure: _requireHealthDisclosure,
+      requireRequiredAcknowledgments: _requireRequiredAcknowledgments,
+      requireTermsAndConditions: _requireTermsAndConditions,
+      requireCancellationPolicy: _requireCancellationPolicy,
       allowSameDayBooking: _allowSameDayBooking,
       createdAt: _settings?.createdAt ?? now,
       updatedAt: now,
@@ -594,7 +607,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
               icon: Icons.assignment_turned_in,
             ),
             Text(
-              'When enabled, clients must complete Health & Skin Disclosure, Required Acknowledgements, Terms & Conditions, and Cancellation & No-Show Policy before booking. When disabled, none of these sections are shown.',
+              'Use the global toggle to enable or disable all compliance forms. When enabled, turn individual sections on or off. Works with none, one, or any combination (backwards compatible).',
               style: AppTypography.bodyMedium.copyWith(
                 color: context.themeSecondaryTextColor,
               ),
@@ -602,15 +615,15 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
             const SizedBox(height: 16),
             SwitchListTile(
               title: Text(
-                'Require Health & Skin Disclosure, Required Acknowledgements, Terms & Conditions, and Cancellation & No-Show Policy',
+                'Enable compliance forms at booking (global)',
                 style: AppTypography.bodyLarge.copyWith(
                   fontWeight: FontWeight.w600,
                 ),
               ),
               subtitle: Text(
                 _requireComplianceForms
-                    ? 'All four compliance sections are shown and required at booking.'
-                    : 'Compliance sections are hidden. Appointments are stored with or without compliance data (backwards compatible).',
+                    ? 'Compliance forms are on. Use the toggles below to show one, some, or all four sections.'
+                    : 'All compliance sections are hidden. Appointments stored with or without compliance data (backwards compatible).',
                 style: AppTypography.bodySmall.copyWith(
                   color: context.themeSecondaryTextColor,
                 ),
@@ -620,7 +633,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                 setState(() {
                   _requireComplianceForms = value;
                   AppLogger().logInfo(
-                    'Require compliance forms: $value',
+                    'Require compliance forms (global): $value',
                     tag: 'AdminSettingsScreen',
                   );
                 });
@@ -633,6 +646,100 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                     : context.themeSecondaryTextColor,
               ),
             ),
+            if (_requireComplianceForms) ...[
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.only(left: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Individual sections (enable one or more):',
+                      style: AppTypography.bodySmall.copyWith(
+                        color: context.themeSecondaryTextColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SwitchListTile(
+                      title: Text(
+                        'Health & Skin Disclosure',
+                        style: AppTypography.bodyMedium.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      value: _requireHealthDisclosure,
+                      onChanged: (value) {
+                        setState(() {
+                          _requireHealthDisclosure = value;
+                          AppLogger().logInfo(
+                            'Require Health & Skin Disclosure: $value',
+                            tag: 'AdminSettingsScreen',
+                          );
+                        });
+                      },
+                      activeColor: AppColors.sunflowerYellow,
+                    ),
+                    SwitchListTile(
+                      title: Text(
+                        'Required Acknowledgements',
+                        style: AppTypography.bodyMedium.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      value: _requireRequiredAcknowledgments,
+                      onChanged: (value) {
+                        setState(() {
+                          _requireRequiredAcknowledgments = value;
+                          AppLogger().logInfo(
+                            'Require Required Acknowledgements: $value',
+                            tag: 'AdminSettingsScreen',
+                          );
+                        });
+                      },
+                      activeColor: AppColors.sunflowerYellow,
+                    ),
+                    SwitchListTile(
+                      title: Text(
+                        'Terms & Conditions',
+                        style: AppTypography.bodyMedium.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      value: _requireTermsAndConditions,
+                      onChanged: (value) {
+                        setState(() {
+                          _requireTermsAndConditions = value;
+                          AppLogger().logInfo(
+                            'Require Terms & Conditions: $value',
+                            tag: 'AdminSettingsScreen',
+                          );
+                        });
+                      },
+                      activeColor: AppColors.sunflowerYellow,
+                    ),
+                    SwitchListTile(
+                      title: Text(
+                        'Cancellation & No-Show Policy',
+                        style: AppTypography.bodyMedium.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      value: _requireCancellationPolicy,
+                      onChanged: (value) {
+                        setState(() {
+                          _requireCancellationPolicy = value;
+                          AppLogger().logInfo(
+                            'Require Cancellation Policy: $value',
+                            tag: 'AdminSettingsScreen',
+                          );
+                        });
+                      },
+                      activeColor: AppColors.sunflowerYellow,
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 32),
 
             // MARK: - Same Day Booking Section
