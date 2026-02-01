@@ -16,6 +16,7 @@ import '../constants/app_constants.dart';
 import '../logging/app_logger.dart';
 import '../../services/auth_service.dart';
 import '../../services/preferences_service.dart';
+import '../../services/view_mode_service.dart';
 import '../../screens/client/client_booking_screen.dart';
 import '../../screens/client/client_confirmation_screen.dart';
 import '../../screens/client/client_appointments_screen.dart';
@@ -162,7 +163,10 @@ class AppRouter {
             GoRoute(
               path: '/signup',
               name: 'signup',
-              builder: (context, state) => const SignUpScreen(),
+              builder: (context, state) {
+                final initialEmail = state.uri.queryParameters['email'];
+                return SignUpScreen(initialEmail: initialEmail);
+              },
             ),
 
             // MARK: - Client Routes
@@ -344,6 +348,9 @@ class AppRouter {
     if (finalUser != null && isUnauthOnlyRoute) {
       logAuth('Logged-in user on unauthenticated route - redirecting to app', tag: 'AppRouter');
       final isAdmin = await _authService.isAdmin();
+      // Initialize view mode so "View as Client" / "Return to Admin" works for admins and superadmins
+      // (splash/login only run on fresh flow; redirect path skips them)
+      await ViewModeService.instance.initialize(isAdmin: isAdmin);
       final target = isAdmin ? '/admin' : AppConstants.routeClientBooking;
       logRouter('Redirecting to $target', tag: 'AppRouter');
       return target;

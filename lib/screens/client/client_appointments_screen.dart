@@ -52,6 +52,10 @@ class _ClientAppointmentsScreenState extends State<ClientAppointmentsScreen> wit
     logUI('ClientAppointmentsScreen initState called', tag: 'ClientAppointmentsScreen');
     logWidgetLifecycle('ClientAppointmentsScreen', 'initState', tag: 'ClientAppointmentsScreen');
     
+    // Set admin-viewing-as-client synchronously so "Return to Admin" shows on first frame
+    // (avoids disappearing when router refreshes and widget is recreated)
+    _isAdminViewingAsClient = _viewModeService.isViewingAsClient;
+    
     _tabController = TabController(length: 2, vsync: this);
     _loadClientEmail();
     _checkAdminViewMode();
@@ -138,6 +142,17 @@ class _ClientAppointmentsScreenState extends State<ClientAppointmentsScreen> wit
           },
         ),
         actions: [
+          // Back to Admin - always visible when admin is viewing as client
+          if (_isAdminViewingAsClient)
+            TextButton.icon(
+              onPressed: () {
+                logInfo('Admin switching back to admin view (AppBar)', tag: 'ClientAppointmentsScreen');
+                _viewModeService.switchToAdminView();
+                context.go(AppConstants.routeAdminDashboard);
+              },
+              icon: const Icon(Icons.admin_panel_settings, size: 20),
+              label: const Text('Back to Admin'),
+            ),
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: () {

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.0] - 2026-01-22
 
+### Build 4 - 2026-01-31
+
+#### Changed
+- Version and build number updated to 1.0.0 Build 4.
+- Changelog and in-app changelog updated for Build 4 (1/31/2026).
+
+#### Technical Details
+- **Version**: 1.0.0
+- **Build Number**: 4
+- **Environment**: Development
+
+---
+
 ### Build 3 - 2026-01-30
 
 #### Added
@@ -99,6 +112,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Build | Date       | Notes |
 |-------|------------|--------|
+| **4** | 2026-01-31 | Version and build number updated to 1.0.0 Build 4; changelog updated. |
 | **3** | 2026-01-30 | Commit hash shown next to version when deployed; Build 3 everywhere. |
 | **2** | 2026-01-22 | Build number 2; version management updates. |
 | **1** | 2026-01-22 | Initial release; core infrastructure and foundation. |

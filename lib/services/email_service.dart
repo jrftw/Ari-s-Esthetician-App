@@ -2,7 +2,7 @@
  * Filename: email_service.dart
  * Purpose: Email service for sending appointment confirmations, reminders, and notifications
  * Author: Kevin Doyle Jr. / Infinitum Imagery LLC
- * Last Modified: 2026-01-22
+ * Last Modified: 2026-01-31
  * Dependencies: mailer, firestore_service, models
  * Platform Compatibility: iOS, Android, Web (via Cloud Functions)
  */
@@ -22,6 +22,22 @@ import 'firestore_service.dart';
 class EmailService {
   final FirestoreService _firestoreService = FirestoreService();
   final FirebaseFunctions _functions = FirebaseFunctions.instance;
+
+  // MARK: - Email Config Status
+  /// Returns true if SMTP is configured (confirmation and reminder emails are enabled).
+  /// Returns false if not configured or on error. Used to show/hide "You will receive a confirmation email" etc.
+  /// Backwards compatible: if the Cloud Function does not exist, returns false.
+  Future<bool> isEmailConfigured() async {
+    try {
+      final callable = _functions.httpsCallable('getEmailConfigStatus');
+      final result = await callable.call<Map<dynamic, dynamic>>(<String, dynamic>{});
+      final configured = result.data['configured'] as bool? ?? false;
+      return configured;
+    } catch (e, stackTrace) {
+      logError('Failed to get email config status', tag: 'EmailService', error: e, stackTrace: stackTrace);
+      return false;
+    }
+  }
 
   // MARK: - Email Sending
   /// Send appointment confirmation email

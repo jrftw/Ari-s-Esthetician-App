@@ -2,7 +2,7 @@
  * Filename: app_version.dart
  * Purpose: Global version and build number management with environment-based display
  * Author: Kevin Doyle Jr. / Infinitum Imagery LLC
- * Last Modified: 2026-01-30
+ * Last Modified: 2026-01-31
  * Dependencies: package_info_plus (for getting package info)
  * Platform Compatibility: iOS, Android, Web
  *
@@ -45,7 +45,7 @@ class AppVersion {
   static const String version = "1.0.0";
   
   /// Build number (incremented with each build)
-  static const int buildNumber = 3;
+  static const int buildNumber = 4;
   
   /// Commit hash when built with --dart-define=COMMIT_HASH=xxx (e.g. for deployed builds).
   /// Empty string when not provided.
@@ -60,9 +60,9 @@ class AppVersion {
 
   // MARK: - Version String Getters
   /// Get full version string with environment suffix (and optional commit hash).
-  /// Format: "1.0.0 (Build 3) abc1234 [dev]" when commit hash present
-  /// Format: "1.0.0 (Build 3) [dev]" for dev
-  /// Format: "1.0.0 (Build 3) abc1234" for production when deployed
+  /// Format: "1.0.0 (Build 4) abc1234 [dev]" when commit hash present
+  /// Format: "1.0.0 (Build 4) [dev]" for dev
+  /// Format: "1.0.0 (Build 4) abc1234" for production when deployed
   static String get versionString {
     final buildPart = "$version (Build $buildNumber)";
     final hashPart = hasCommitHash ? " $commitHash" : "";

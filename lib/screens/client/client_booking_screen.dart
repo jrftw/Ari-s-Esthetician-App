@@ -197,6 +197,11 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
     super.initState();
     logUI('ClientBookingScreen initState called', tag: 'ClientBookingScreen');
     logWidgetLifecycle('ClientBookingScreen', 'initState', tag: 'ClientBookingScreen');
+    
+    // Set admin-viewing-as-client synchronously so "Return to Admin" shows on first frame
+    // (avoids disappearing when router refreshes and widget is recreated)
+    _isAdminViewingAsClient = _viewModeService.isViewingAsClient;
+    
     _loadServices();
     _loadCategories();
     _checkAdminViewMode();
@@ -642,6 +647,23 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
     if (a.hour > b.hour) return false;
     return a.minute <= b.minute;
   }
+
+  // MARK: - First Bookable Date
+  /// Returns the first calendar date that can have a booking, used to default the calendar
+  /// to the month with availability and to enable only valid days.
+  /// - allowSameDay true: first bookable date is today (times 2h+ from now shown).
+  /// - allowSameDay false: first bookable date is the day *after* (now+24h)'s date so that
+  ///   e.g. on Jan 31 7:13 PM, Feb 1 does not show (no bookings within 24h of that day).
+  DateTime _getFirstBookableDate() {
+    final now = DateTime.now();
+    final allowSameDay = _businessSettings?.allowSameDayBooking ?? true;
+    if (allowSameDay) {
+      return DateTime(now.year, now.month, now.day);
+    }
+    final nowPlus24 = now.add(const Duration(hours: 24));
+    final dateOfNowPlus24 = DateTime(nowPlus24.year, nowPlus24.month, nowPlus24.day);
+    return dateOfNowPlus24.add(const Duration(days: 1));
+  }
   
   // MARK: - Service Filtering
   /// Apply all filters (category and search) to services
@@ -727,6 +749,10 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
       setState(() {
         _errorMessage = null;
         _currentStep = BookingStep.dateTimeSelection;
+        // Default calendar to the month with availability (e.g. Feb when today is Jan 31 7:13 PM and 24h required)
+        _focusedDay = _getFirstBookableDate();
+        _selectedDate = null;
+        _selectedTime = null;
       });
     } else if (_currentStep == BookingStep.dateTimeSelection) {
       if (_selectedDate == null || _selectedTime == null) {
@@ -883,6 +909,32 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
         duration: const Duration(seconds: 3),
       ),
     );
+  }
+
+  /// Show "create account?" prompt for returning guests (no account).
+  /// Returns true to go to confirmation ("Not now"), false to go to signup ("Create account").
+  Future<bool> _showGuestCreateAccountPrompt(BuildContext context) async {
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Create an account?'),
+        content: const Text(
+          "You've booked with us before. Would you like to create an account to combine your booking history and manage future appointments?",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Create account'),
+          ),
+        ],
+      ),
+    );
+    return result ?? true;
   }
   
   // MARK: - Payment Processing
@@ -1205,10 +1257,30 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
         }
       }
       
-      // Navigate to confirmation screen with first appointment ID
-      // The confirmation screen can be updated later to show all appointments
+      // Guest "create account?" prompt: if not signed in and a client with this email
+      // already exists (returning guest with no account), offer to create account and combine data.
       if (mounted && appointmentIds.isNotEmpty) {
-        context.go('${AppConstants.routeClientConfirmation}/${appointmentIds.first}');
+        final bookingEmail = _emailController.text.trim();
+        final isSignedIn = _authService.currentUser != null;
+        if (!isSignedIn && bookingEmail.isNotEmpty) {
+          try {
+            final existingClient = await _firestoreService.getClientByEmail(bookingEmail);
+            if (existingClient != null && existingClient.userId == null && mounted) {
+              final goToConfirmation = await _showGuestCreateAccountPrompt(context);
+              if (!goToConfirmation) {
+                final signupUri = Uri(path: '/signup', queryParameters: {'email': bookingEmail});
+                context.go(signupUri.toString());
+                return;
+              }
+            }
+          } catch (e, stackTrace) {
+            logError('Failed to check existing client for guest prompt', tag: 'ClientBookingScreen', error: e, stackTrace: stackTrace);
+            // Continue to confirmation on error
+          }
+        }
+        if (mounted) {
+          context.go('${AppConstants.routeClientConfirmation}/${appointmentIds.first}');
+        }
       }
     } catch (e, stackTrace) {
       logError('Failed to submit booking', tag: 'ClientBookingScreen', error: e, stackTrace: stackTrace);
@@ -1247,6 +1319,17 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
               )
             : null,
         actions: [
+          // Back to Admin - always visible when admin is viewing as client
+          if (_isAdminViewingAsClient)
+            TextButton.icon(
+              onPressed: () {
+                logInfo('Admin switching back to admin view (AppBar)', tag: 'ClientBookingScreen');
+                _viewModeService.switchToAdminView();
+                context.go(AppConstants.routeAdminDashboard);
+              },
+              icon: const Icon(Icons.admin_panel_settings, size: 20),
+              label: const Text('Back to Admin'),
+            ),
           IconButton(
             icon: const Icon(Icons.calendar_today),
             onPressed: () {
@@ -2049,23 +2132,18 @@ class _ClientBookingScreenState extends State<ClientBookingScreen> {
                 fontWeight: FontWeight.bold,
               ),
             ),
+            onPageChanged: (focusedDay) {
+              setState(() => _focusedDay = focusedDay);
+            },
             enabledDayPredicate: (day) {
-              // Disable past dates and dates too far in advance. When same-day disabled, first selectable day is 24h from now.
-              final now = DateTime.now();
-              final allowSameDay = _businessSettings?.allowSameDayBooking ?? true;
-              final DateTime minSelectableDate;
-              if (allowSameDay) {
-                final minDate = now.add(const Duration(hours: AppConstants.minBookingAdvanceHours));
-                minSelectableDate = minDate.subtract(const Duration(days: 1));
-                // Allow day > minDate - 1 day (i.e. today and future when today has slots 2h+ from now)
-                return day.isAfter(minSelectableDate) &&
-                    day.isBefore(_lastDay.add(const Duration(days: 1)));
-              } else {
-                final nowPlus24 = now.add(const Duration(hours: 24));
-                minSelectableDate = DateTime(nowPlus24.year, nowPlus24.month, nowPlus24.day).subtract(const Duration(days: 1));
-                return day.isAfter(minSelectableDate) &&
-                    day.isBefore(_lastDay.add(const Duration(days: 1)));
-              }
+              // Disable past dates and dates too far in advance.
+              // Same-day on: today and future (times 2h+ from now shown per day).
+              // Same-day off (24h required): first selectable day is the day *after* (now+24h)'s date
+              // so e.g. Jan 31 7:13 PM → Feb 1 does not show; Feb 2+ only.
+              final firstBookable = _getFirstBookableDate();
+              final startOfFirst = DateTime(firstBookable.year, firstBookable.month, firstBookable.day);
+              final endOfRange = _lastDay.add(const Duration(days: 1));
+              return !day.isBefore(startOfFirst) && day.isBefore(endOfRange);
             },
           ),
         ),

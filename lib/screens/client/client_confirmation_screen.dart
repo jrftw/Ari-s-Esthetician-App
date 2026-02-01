@@ -2,7 +2,7 @@
  * Filename: client_confirmation_screen.dart
  * Purpose: Appointment confirmation screen after successful booking
  * Author: Kevin Doyle Jr. / Infinitum Imagery LLC
- * Last Modified: 2024-01-XX
+ * Last Modified: 2026-01-31
  * Dependencies: Flutter, models, services, go_router, intl
  * Platform Compatibility: iOS, Android, Web
  */
@@ -23,6 +23,7 @@ import '../../services/firestore_service.dart';
 import '../../services/payment_service.dart';
 import '../../services/view_mode_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/email_service.dart';
 
 // MARK: - Client Confirmation Screen
 /// Screen displayed after successful appointment booking
@@ -45,11 +46,14 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
   final PaymentService _paymentService = PaymentService();
   final ViewModeService _viewModeService = ViewModeService.instance;
   final AuthService _authService = AuthService();
+  final EmailService _emailService = EmailService();
   AppointmentModel? _appointment;
   bool _isLoading = true;
   String? _errorMessage;
   bool _isAdminViewingAsClient = false;
-  
+  /// True if SMTP is configured (show email bullets); false or null = hide email bullets (backwards compatible).
+  bool? _emailConfigured;
+
   // MARK: - Post-Appointment Tip State
   bool _showTipDialog = false;
   int _postTipAmountCents = 0;
@@ -69,6 +73,11 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
   void initState() {
     super.initState();
     logUI('ClientConfirmationScreen initState called', tag: 'ClientConfirmationScreen');
+    
+    // Set admin-viewing-as-client synchronously so "Return to Admin" shows on first frame
+    // (avoids disappearing when router refreshes and widget is recreated)
+    _isAdminViewingAsClient = _viewModeService.isViewingAsClient;
+    
     _loadAppointment();
     _checkAdminViewMode();
     _viewModeService.addListener(_onViewModeChanged);
@@ -124,11 +133,15 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
       }
 
       logSuccess('Appointment loaded successfully', tag: 'ClientConfirmationScreen');
-      
-      setState(() {
-        _appointment = appointment;
-        _isLoading = false;
-      });
+
+      final emailConfigured = await _emailService.isEmailConfigured();
+      if (mounted) {
+        setState(() {
+          _appointment = appointment;
+          _isLoading = false;
+          _emailConfigured = emailConfigured;
+        });
+      }
     } catch (e, stackTrace) {
       logError('Failed to load appointment', tag: 'ClientConfirmationScreen', error: e, stackTrace: stackTrace);
       setState(() {
@@ -136,6 +149,18 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
         _errorMessage = 'Failed to load appointment details.';
       });
     }
+  }
+
+  // MARK: - What's Next Bullets (Email-Aware)
+  /// Builds "What's Next?" bullet text. Shows email bullets only when SMTP is configured (backwards compatible).
+  String _buildWhatsNextBullets() {
+    const arriveEarly = '• Please arrive 10 minutes early for your appointment';
+    if (_emailConfigured == true) {
+      return '• You will receive a confirmation email shortly\n'
+          '• A reminder will be sent 24 hours before your appointment\n'
+          '$arriveEarly';
+    }
+    return arriveEarly;
   }
 
   // MARK: - Build Method
@@ -148,6 +173,22 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
         title: const Text('Booking Confirmed'),
         elevation: 0,
         automaticallyImplyLeading: false,
+        actions: [
+          // Back to Admin - always visible when admin is viewing as client
+          if (_isAdminViewingAsClient)
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: TextButton.icon(
+                onPressed: () {
+                  logInfo('Admin switching back to admin view (AppBar)', tag: 'ClientConfirmationScreen');
+                  _viewModeService.switchToAdminView();
+                  context.go(AppConstants.routeAdminDashboard);
+                },
+                icon: const Icon(Icons.admin_panel_settings, size: 20),
+                label: const Text('Back to Admin'),
+              ),
+            ),
+        ],
       ),
       body: SafeArea(
         child: Column(
@@ -408,6 +449,24 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
+                              'Service Price',
+                              style: AppTypography.bodyMedium.copyWith(
+                                color: context.themeSecondaryTextColor,
+                              ),
+                            ),
+                            Text(
+                              _formatServicePriceCents(appointment),
+                              style: AppTypography.bodyMedium.copyWith(
+                                color: context.themePrimaryTextColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
                               'Deposit Paid',
                               style: AppTypography.bodyMedium.copyWith(
                                 color: context.themeSecondaryTextColor,
@@ -485,7 +544,7 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
                     ),
                   ),
                 ] else ...[
-                  // No payment made - show pricing info
+                  // No payment made - show pricing info (use actual service price from snapshot, not deposit)
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -507,7 +566,7 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
                               ),
                             ),
                             Text(
-                              appointment.formattedDeposit,
+                              _formatServicePriceCents(appointment),
                               style: AppTypography.bodyMedium.copyWith(
                                 color: context.themePrimaryTextColor,
                               ),
@@ -575,9 +634,7 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  '• You will receive a confirmation email shortly\n'
-                  '• A reminder will be sent 24 hours before your appointment\n'
-                  '• Please arrive 10 minutes early for your appointment',
+                  _buildWhatsNextBullets(),
                   style: AppTypography.bodyMedium.copyWith(
                     color: context.themePrimaryTextColor,
                   ),
@@ -660,6 +717,17 @@ class _ClientConfirmationScreenState extends State<ClientConfirmationScreen> {
         ],
       ),
     );
+  }
+
+  // MARK: - Price Formatting
+  /// Format service price for display: use actual service price from snapshot (not deposit)
+  /// so confirmation shows accurate price even when deposit is $0 (pay on arrival).
+  String _formatServicePriceCents(AppointmentModel appointment) {
+    final priceCents = appointment.serviceSnapshot?.priceCents;
+    if (priceCents != null && priceCents >= 0) {
+      return '\$${(priceCents / 100).toStringAsFixed(2)}';
+    }
+    return appointment.formattedDeposit;
   }
 
   // MARK: - Detail Row

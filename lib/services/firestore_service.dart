@@ -178,8 +178,10 @@ class FirestoreService {
 
       AppLogger().logInfo('Appointment created: ${docRef.id}', tag: 'FirestoreService');
       
-      // Directory (client) sync is performed by Cloud Function onAppointmentCreated
-      // so guest and non-admin users do not need write access to clients collection.
+      // Client directory sync: Cloud Function onAppointmentCreated syncs name, email,
+      // and phone to the clients collection for every appointment (guest, logged-in
+      // user, or admin-created). Director always sees current contact info; no client
+      // write access to clients collection required.
       
       // Create notification for admin
       _notificationService.createAppointmentCreatedNotification(
@@ -647,6 +649,30 @@ class FirestoreService {
   }
 
   // MARK: - Client Operations
+  /// Get client by email if one exists. Returns null when no client has this email.
+  /// Used to detect returning guests (no account) for "create account and combine data?" prompt.
+  Future<ClientModel?> getClientByEmail(String email) async {
+    try {
+      final trimmed = email.trim();
+      if (trimmed.isEmpty) return null;
+      final snapshot = await _firestore
+          .collection(AppConstants.firestoreClientsCollection)
+          .where('email', isEqualTo: trimmed)
+          .limit(1)
+          .get();
+      if (snapshot.docs.isEmpty) return null;
+      return ClientModel.fromFirestore(snapshot.docs.first);
+    } catch (e, stackTrace) {
+      AppLogger().logError(
+        'Failed to get client by email',
+        tag: 'FirestoreService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
   /// Get or create client by email
   Future<ClientModel> getOrCreateClient({
     required String firstName,

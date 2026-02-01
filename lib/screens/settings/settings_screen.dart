@@ -350,14 +350,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   // MARK: - Changelog Content
-  /// Build changelog content aligned with CHANGELOG.md (Build 1, 2, 3)
+  /// Build changelog content aligned with CHANGELOG.md (Build 1, 2, 3, 4)
   Widget _buildChangelogContent() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Build 3 - 2026-01-30
+        // Build 4 - 2026-01-31
         _buildChangelogVersion(
           version: '${AppVersion.version} (Build ${AppVersion.buildNumber})',
+          date: '2026-01-31',
+          items: [
+            'Version and build number updated to 1.0.0 Build 4',
+            'Changelog updated for Build 4 (1/31/2026)',
+          ],
+        ),
+        const SizedBox(height: 20),
+        // Build 3 - 2026-01-30
+        _buildChangelogVersion(
+          version: '1.0.0 (Build 3)',
           date: '2026-01-30',
           items: [
             'Version display now shows commit hash when deployed (next to version)',

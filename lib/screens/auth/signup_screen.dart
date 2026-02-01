@@ -20,8 +20,11 @@ import '../../core/logging/app_logger.dart';
 // MARK: - Sign Up Screen
 /// Screen for users to create new accounts
 /// All users sign up as 'client' by default - admin role must be set manually
+/// Optional [initialEmail] pre-fills the email field (e.g. from guest "create account?" flow).
 class SignUpScreen extends StatefulWidget {
-  const SignUpScreen({super.key});
+  const SignUpScreen({super.key, this.initialEmail});
+
+  final String? initialEmail;
 
   @override
   State<SignUpScreen> createState() => _SignUpScreenState();
@@ -37,6 +40,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialEmail != null && widget.initialEmail!.trim().isNotEmpty) {
+      _emailController.text = widget.initialEmail!.trim();
+    }
+  }
 
   @override
   void dispose() {
